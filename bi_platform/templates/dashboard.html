@@ -3,128 +3,150 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws:;" />
   <title>BI Platform — Data Dashboard</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='js/vendor/chart.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/vendor/chartjs-adapter-date-fns.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/vendor/socket.io.min.js') }}"></script>
 </head>
 <body>
+  <a href="#main-content" class="sr-only" style="position:absolute;top:-40px;left:0;background:var(--accent);color:#fff;padding:8px;z-index:100;">Skip to content</a>
+
   <!-- ─── SIDEBAR ─── -->
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
     <div class="sidebar-brand">BI Platform</div>
-    <nav class="sidebar-nav">
-      <a href="#" class="nav-link active" data-section="overview">Overview</a>
+    <nav>
+      <a href="#" class="nav-link active" data-section="overview" aria-current="page">Overview</a>
       <a href="#" class="nav-link" data-section="revenue">Revenue</a>
       <a href="#" class="nav-link" data-section="products">Products</a>
       <a href="#" class="nav-link" data-section="website">Website</a>
       <a href="#" class="nav-link" data-section="customers">Customers</a>
       <a href="#" class="nav-link" data-section="data-explorer">Data Explorer</a>
+      <a href="#" class="nav-link" data-section="sql-query">SQL Query</a>
     </nav>
     <div class="sidebar-footer">
-      <div class="connection-status" id="connStatus">
+      <div class="connection-status" id="connStatus" aria-live="polite">
         <span class="status-dot"></span> Real-time connected
       </div>
-      <a href="{{ url_for('auth.logout') }}" class="nav-link" style="border-left:none;padding:.7rem 1.5rem;margin-top:.5rem;">Logout</a>
+      <a href="{{ url_for('auth.logout') }}" class="nav-link" aria-label="Logout" style="border-left:none;padding:.7rem 1.5rem;margin-top:.5rem;">Logout</a>
     </div>
   </aside>
 
   <!-- ─── MAIN ─── -->
-  <main class="main">
+  <main class="main" id="main-content">
     <!-- Top bar -->
     <header class="topbar">
-      <button class="menu-toggle" id="menuToggle">&#9776;</button>
+      <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation menu">&#9776;</button>
       <h1 class="topbar-title" id="pageTitle">Overview</h1>
       <div class="topbar-actions">
-        <button class="btn btn-sm" id="refreshBtn">&#8635; Refresh</button>
-        <button class="btn btn-sm btn-accent" id="connectDbBtn">+ Connect DB</button>
-        <div class="filter-group">
-          <select id="regionFilter"><option value="">All Regions</option></select>
-          <select id="categoryFilter"><option value="">All Categories</option></select>
-          <select id="segmentFilter"><option value="">All Segments</option></select>
+        <button class="btn btn-sm" id="refreshBtn" aria-label="Refresh dashboard data">&#8635; Refresh</button>
+        <select id="activeConn" aria-label="Active data source" style="margin-right:.5rem;min-width:120px"><option value="demo">demo</option></select>
+        <button class="btn btn-sm btn-accent" id="connectDbBtn" aria-label="Connect to database">+ Connect DB</button>
+        <div class="filter-group" role="group" aria-label="Dashboard filters">
+          <select id="regionFilter" aria-label="Filter by region"><option value="">All Regions</option></select>
+          <select id="categoryFilter" aria-label="Filter by category"><option value="">All Categories</option></select>
+          <select id="segmentFilter" aria-label="Filter by segment"><option value="">All Segments</option></select>
         </div>
       </div>
     </header>
 
     <!-- ═══ OVERVIEW ═══ -->
-    <section class="section active" id="sec-overview">
-      <div class="kpi-row" id="kpiRow"></div>
+    <section class="section active" id="sec-overview" aria-label="Overview">
+      <div class="kpi-row" id="kpiRow" role="region" aria-label="Key performance indicators"></div>
       <div class="grid grid-2">
-        <div class="card"><canvas id="chartRevenueTrend"></canvas></div>
-        <div class="card"><canvas id="chartRegionBar"></canvas></div>
+        <div class="card"><canvas id="chartRevenueTrend" aria-label="Revenue trend chart"></canvas></div>
+        <div class="card"><canvas id="chartRegionBar" aria-label="Region bar chart"></canvas></div>
       </div>
       <div class="grid grid-3">
-        <div class="card"><canvas id="chartCategoryPie"></canvas></div>
-        <div class="card"><canvas id="chartSegmentDonut"></canvas></div>
-        <div class="card"><canvas id="chartProfitMargin"></canvas></div>
+        <div class="card"><canvas id="chartCategoryPie" aria-label="Category pie chart"></canvas></div>
+        <div class="card"><canvas id="chartSegmentDonut" aria-label="Segment donut chart"></canvas></div>
+        <div class="card"><canvas id="chartProfitMargin" aria-label="Profit margin chart"></canvas></div>
       </div>
     </section>
 
     <!-- ═══ REVENUE ═══ -->
-    <section class="section" id="sec-revenue">
-      <div class="kpi-row" id="revenueKpis"></div>
+    <section class="section" id="sec-revenue" aria-label="Revenue">
+      <div class="kpi-row" id="revenueKpis" role="region" aria-label="Revenue KPIs"></div>
       <div class="grid grid-2">
-        <div class="card"><canvas id="chartMonthlyRev"></canvas></div>
-        <div class="card"><canvas id="chartMonthlyProfit"></canvas></div>
+        <div class="card"><canvas id="chartMonthlyRev" aria-label="Monthly revenue chart"></canvas></div>
+        <div class="card"><canvas id="chartMonthlyProfit" aria-label="Monthly profit chart"></canvas></div>
       </div>
-      <div class="card"><canvas id="chartRegionalTable"></canvas></div>
+      <div class="card"><canvas id="chartRegionalTable" aria-label="Regional comparison chart"></canvas></div>
     </section>
 
     <!-- ═══ PRODUCTS ═══ -->
-    <section class="section" id="sec-products">
+    <section class="section" id="sec-products" aria-label="Products">
       <div class="grid grid-2">
-        <div class="card"><canvas id="chartTopProducts"></canvas></div>
-        <div class="card"><canvas id="chartCategoryRevenue"></canvas></div>
+        <div class="card"><canvas id="chartTopProducts" aria-label="Top products chart"></canvas></div>
+        <div class="card"><canvas id="chartCategoryRevenue" aria-label="Category revenue chart"></canvas></div>
       </div>
       <div class="card" id="productTableCard">
-        <h3>Product Performance</h3>
-        <div class="table-wrap" id="productTable"></div>
+        <h2>Product Performance</h2>
+        <div class="table-wrap" id="productTable" role="region" aria-label="Product performance table"></div>
       </div>
     </section>
 
     <!-- ═══ WEBSITE ═══ -->
-    <section class="section" id="sec-website">
-      <div class="kpi-row" id="websiteKpis"></div>
+    <section class="section" id="sec-website" aria-label="Website analytics">
+      <div class="kpi-row" id="websiteKpis" role="region" aria-label="Website KPIs"></div>
       <div class="grid grid-2">
-        <div class="card"><canvas id="chartPageViews"></canvas></div>
-        <div class="card"><canvas id="chartConversions"></canvas></div>
+        <div class="card"><canvas id="chartPageViews" aria-label="Page views chart"></canvas></div>
+        <div class="card"><canvas id="chartConversions" aria-label="Conversions chart"></canvas></div>
       </div>
     </section>
 
     <!-- ═══ CUSTOMERS ═══ -->
-    <section class="section" id="sec-customers">
-      <div class="kpi-row" id="customerKpis"></div>
+    <section class="section" id="sec-customers" aria-label="Customer insights">
+      <div class="kpi-row" id="customerKpis" role="region" aria-label="Customer KPIs"></div>
       <div class="grid grid-2">
-        <div class="card"><canvas id="chartCustSegment"></canvas></div>
-        <div class="card"><canvas id="chartCustRegion"></canvas></div>
+        <div class="card"><canvas id="chartCustSegment" aria-label="Customer segment chart"></canvas></div>
+        <div class="card"><canvas id="chartCustRegion" aria-label="Customer region chart"></canvas></div>
       </div>
     </section>
 
     <!-- ═══ DATA EXPLORER ═══ -->
-    <section class="section" id="sec-data-explorer">
+    <section class="section" id="sec-data-explorer" aria-label="Data Explorer">
       <div class="explorer-controls">
-        <select id="explorerTable"></select>
-        <input type="text" id="explorerSearch" placeholder="Search..." />
-        <button class="btn btn-sm btn-accent" id="explorerLoad">Load</button>
+        <select id="explorerConn" aria-label="Select connection">
+          <option value="demo">demo</option>
+        </select>
+        <select id="explorerTable" aria-label="Select table"></select>
+        <input type="text" id="explorerSearch" placeholder="Search..." aria-label="Search table data" />
+        <button class="btn btn-sm btn-accent" id="explorerLoad" aria-label="Load table data">Load</button>
       </div>
       <div class="card">
-        <div class="table-wrap" id="explorerTableWrap"></div>
-        <div class="pagination" id="explorerPagination"></div>
+        <div class="table-wrap" id="explorerTableWrap" role="region" aria-label="Explorer data table"></div>
+        <div class="pagination" id="explorerPagination" role="navigation" aria-label="Table pagination"></div>
       </div>
     </section>
   </main>
 
-  <!-- ═══ MODAL ═══ -->
-  <div class="modal-overlay" id="dbModal">
+    <!-- ═══ SQL QUERY ═══ -->
+    <section class="section" id="sec-sql-query" aria-label="SQL Query">
+      <div class="card">
+        <h2>SQL Query</h2>
+        <select id="sqlConnection" aria-label="Select database connection"></select>
+        <textarea id="sqlEditor" rows="6" style="width:100%;font-family:monospace;margin:.5rem 0" placeholder="SELECT * FROM sales LIMIT 10"></textarea>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn btn-accent" id="sqlRunBtn" aria-label="Run SQL query">Run</button>
+          <button class="btn" id="sqlClearBtn" aria-label="Clear result">Clear</button>
+        </div>
+        <div id="sqlResult" style="margin-top:.5rem;overflow:auto;max-height:400px"></div>
+      </div>
+    </section>
+
+    <!-- ═══ MODAL ═══ -->
+  <div class="modal-overlay" id="dbModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal">
-      <h3>Connect to Database</h3>
-      <label>Name <input type="text" id="dbName" placeholder="mydb" /></label>
-      <label>Connection String
+      <h3 id="modalTitle">Connect to Database</h3>
+      <label for="dbName">Name <input type="text" id="dbName" placeholder="mydb" /></label>
+      <label for="dbConnStr">Connection String
         <input type="text" id="dbConnStr" placeholder="postgresql://user:pass@host/db" />
       </label>
       <div class="modal-actions">
-        <button class="btn" id="dbModalCancel">Cancel</button>
-        <button class="btn btn-accent" id="dbModalConnect">Connect</button>
+        <button class="btn" id="dbModalCancel" aria-label="Cancel">Cancel</button>
+        <button class="btn btn-accent" id="dbModalConnect" aria-label="Connect to database">Connect</button>
       </div>
     </div>
   </div>
