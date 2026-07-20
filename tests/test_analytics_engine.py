@@ -1,9 +1,8 @@
+import numpy as np
+import pandas as pd
 import pytest
 
 from bi_platform.core.analytics_engine import AnalyticsEngine
-from bi_platform.core.data_processor import DataProcessor
-import pandas as pd
-import numpy as np
 
 
 @pytest.fixture

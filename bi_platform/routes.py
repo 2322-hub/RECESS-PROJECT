@@ -1,19 +1,16 @@
 import json
-import logging
 import re
 import time
 
 import pandas as pd
-from flask import Blueprint, jsonify, request, render_template, Response, session
-from sqlalchemy import text
+from flask import Blueprint, Response, jsonify, render_template, request, session
 
-from . import logger, limiter, socketio
+from . import limiter, logger, socketio
 from .auth import login_required
+from .config import Config
 from .core.analytics_engine import AnalyticsEngine
 from .core.database_connector import DatabaseConnector
-from .core.query_builder import QueryBuilder
 from .utils.helpers import safe_json_serialize
-from .config import Config
 
 
 def _json_response(data, status=200):
@@ -40,7 +37,7 @@ def _get_cached(name: str) -> pd.DataFrame:
     if not _TABLE_RE.match(name):
         raise ValueError(f"Invalid table name: {name}")
     if name not in _df_cache:
-        _df_cache[name] = db_connector.execute_query("demo", f"SELECT * FROM {name}")
+        _df_cache[name] = db_connector.execute_query("demo", f"SELECT * FROM {name}")  # noqa: S608
     return _df_cache[name].copy()
 
 

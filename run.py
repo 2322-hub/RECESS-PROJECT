@@ -16,7 +16,7 @@ if __name__ == "__main__":
     debug = app.config.get("DEBUG", False)
     socketio.run(
         app,
-        host="0.0.0.0",
+        host="0.0.0.0",  # noqa: S104
         port=int(os.environ.get("PORT", 5000)),
         debug=debug,
         allow_unsafe_werkzeug=debug,

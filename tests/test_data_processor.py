@@ -27,7 +27,7 @@ def dp():
 
 class TestDataProcessor:
     def test_time_series(self, dp, sample_df):
-        result = dp.time_series(sample_df, "date", "total_revenue", freq="M")
+        result = dp.time_series(sample_df, "date", "total_revenue", freq="ME")
         assert "date" in result.columns
         assert "value" in result.columns
         assert len(result) > 0

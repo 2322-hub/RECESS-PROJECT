@@ -1,6 +1,7 @@
-import pandas as pd
-import numpy as np
 from typing import Any
+
+import numpy as np
+import pandas as pd
 
 
 class DataProcessor:
@@ -74,7 +75,12 @@ class DataProcessor:
     # KPI calculations
     # ------------------------------------------------------------------
     @staticmethod
-    def compute_kpis(df: pd.DataFrame, revenue_col: str = "total_revenue", cost_col: str = "cost", profit_col: str = "profit") -> dict:
+    def compute_kpis(
+        df: pd.DataFrame,
+        revenue_col: str = "total_revenue",
+        cost_col: str = "cost",
+        profit_col: str = "profit",
+    ) -> dict:
         kpis: dict[str, Any] = {}
         if revenue_col in df.columns:
             kpis["total_revenue"] = round(float(df[revenue_col].sum()), 2)

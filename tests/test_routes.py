@@ -1,4 +1,3 @@
-import pytest
 
 
 class TestRoutes:
@@ -93,8 +92,18 @@ class TestRoutes:
         res = authenticated_client.get("/logout", follow_redirects=False)
         assert res.status_code == 302
 
-    def test_connect_db_requires_admin(self, authenticated_client):
-        res = authenticated_client.post(
+    def test_connect_db_requires_admin(self, client):
+        client.post(
+            "/api/register",
+            json={"username": "viewer1", "password": "password123"},
+            content_type="application/json",
+        )
+        client.post(
+            "/login",
+            data={"username": "viewer1", "password": "password123"},
+            follow_redirects=False,
+        )
+        res = client.post(
             "/api/connect",
             json={"name": "test", "connection_string": "sqlite:///test.db"},
             content_type="application/json",

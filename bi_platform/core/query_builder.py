@@ -16,7 +16,7 @@ class QueryBuilder:
                order_by: str | None = None, limit: int | None = None, offset: int | None = None) -> tuple[str, dict]:
         cls._validate_identifier(table)
         cols = ", ".join(columns) if columns else "*"
-        sql = f"SELECT {cols} FROM {table}"
+        sql = f"SELECT {cols} FROM {table}"  # noqa: S608
         params: dict = {}
         if where:
             sql += f" WHERE {where}"
@@ -43,7 +43,7 @@ class QueryBuilder:
         af = agg_func.upper()
         if af not in valid_funcs:
             raise ValueError(f"Unsupported aggregate: {af}")
-        sql = f"SELECT {group_col}, {af}({agg_col}) AS aggregated_value FROM {table}"
+        sql = f"SELECT {group_col}, {af}({agg_col}) AS aggregated_value FROM {table}"  # noqa: S608
         params: dict = {}
         if where:
             sql += f" WHERE {where}"

@@ -1,9 +1,6 @@
-import sqlite3
-import os
-from contextlib import contextmanager
 
 import pandas as pd
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import create_engine, inspect, text
 
 from ..config import Config
 
@@ -57,7 +54,7 @@ class DatabaseConnector:
     def get_table_info(self, conn_name: str, table: str) -> dict:
         engine = self._engines[conn_name]
         with engine.connect() as conn:
-            count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+            count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()  # noqa: S608
         columns = self.get_columns(conn_name, table)
         return {"table": table, "row_count": count, "columns": columns}
 
@@ -97,7 +94,7 @@ class DatabaseConnector:
                 cnt = conn.execute(text("SELECT COUNT(*) FROM sales")).scalar()
                 if cnt > 0:
                     return
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
             conn.execute(text("""
@@ -158,9 +155,10 @@ class DatabaseConnector:
             price = round(float(rng.uniform(5, 500)), 2)
             total = round(qty * price, 2)
             cost = round(total * rng.uniform(0.3, 0.8), 2)
-            sales_rows.append(
-                (i, d, rng.choice(regions), cat, prod, qty, price, total, cost, round(total - cost, 2), rng.choice(segments))
-            )
+            sales_rows.append((
+                i, d, rng.choice(regions), cat, prod, qty, price,
+                total, cost, round(total - cost, 2), rng.choice(segments),
+            ))
         with engine.begin() as conn:
             conn.execute(text("""
                 INSERT INTO sales (id, date, region, product_category, product_name,
@@ -210,6 +208,9 @@ class DatabaseConnector:
         with engine.begin() as conn:
             conn.execute(text("""
                 INSERT INTO website_analytics
-                    (id, date, page_views, unique_visitors, bounce_rate, avg_session_duration, conversions, revenue)
-                VALUES (:id, :date, :page_views, :unique_visitors, :bounce_rate, :avg_session_duration, :conversions, :revenue)
+                    (id, date, page_views, unique_visitors,
+                     bounce_rate, avg_session_duration, conversions, revenue)
+                VALUES (:id, :date, :page_views, :unique_visitors,
+                        :bounce_rate, :avg_session_duration,
+                        :conversions, :revenue)
             """), analytics_rows)
