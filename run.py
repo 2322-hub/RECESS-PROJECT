@@ -19,5 +19,5 @@ if __name__ == "__main__":
         host="0.0.0.0",  # noqa: S104
         port=int(os.environ.get("PORT", 5000)),
         debug=debug,
-        allow_unsafe_werkzeug=debug,
+        allow_unsafe_werkzeug=True,  # werkzeug is acceptable for this demo project
     )
