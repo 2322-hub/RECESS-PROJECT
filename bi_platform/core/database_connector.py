@@ -1,4 +1,3 @@
-
 import pandas as pd
 from sqlalchemy import create_engine, inspect, text
 
@@ -97,7 +96,8 @@ class DatabaseConnector:
             except Exception:  # noqa: S110
                 pass
 
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS sales (
                     id INTEGER PRIMARY KEY,
                     date TEXT,
@@ -111,8 +111,10 @@ class DatabaseConnector:
                     profit REAL,
                     customer_segment TEXT
                 )
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS customers (
                     id INTEGER PRIMARY KEY,
                     name TEXT,
@@ -123,8 +125,10 @@ class DatabaseConnector:
                     orders_count INTEGER,
                     segment TEXT
                 )
-            """))
-            conn.execute(text("""
+            """)
+            )
+            conn.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS website_analytics (
                     id INTEGER PRIMARY KEY,
                     date TEXT,
@@ -135,7 +139,8 @@ class DatabaseConnector:
                     conversions INTEGER,
                     revenue REAL
                 )
-            """))
+            """)
+            )
 
         rng = np.random.default_rng(42)
         regions = ["North", "South", "East", "West"]
@@ -155,62 +160,97 @@ class DatabaseConnector:
             price = round(float(rng.uniform(5, 500)), 2)
             total = round(qty * price, 2)
             cost = round(total * rng.uniform(0.3, 0.8), 2)
-            sales_rows.append((
-                i, d, rng.choice(regions), cat, prod, qty, price,
-                total, cost, round(total - cost, 2), rng.choice(segments),
-            ))
+            sales_rows.append(
+                (
+                    i,
+                    d,
+                    rng.choice(regions),
+                    cat,
+                    prod,
+                    qty,
+                    price,
+                    total,
+                    cost,
+                    round(total - cost, 2),
+                    rng.choice(segments),
+                )
+            )
         with engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 INSERT INTO sales (id, date, region, product_category, product_name,
                     quantity, unit_price, total_revenue, cost, profit, customer_segment)
                 VALUES (:id, :date, :region, :category, :product, :qty, :price, :total, :cost, :profit, :segment)
-            """), [
-                {"id": r[0], "date": r[1], "region": r[2], "category": r[3], "product": r[4],
-                 "qty": r[5], "price": r[6], "total": r[7], "cost": r[8], "profit": r[9], "segment": r[10]}
-                for r in sales_rows
-            ])
+            """),
+                [
+                    {
+                        "id": r[0],
+                        "date": r[1],
+                        "region": r[2],
+                        "category": r[3],
+                        "product": r[4],
+                        "qty": r[5],
+                        "price": r[6],
+                        "total": r[7],
+                        "cost": r[8],
+                        "profit": r[9],
+                        "segment": r[10],
+                    }
+                    for r in sales_rows
+                ],
+            )
 
         # Customers
         cust_rows = []
         for i in range(1, 201):
             sd = str(dates[rng.integers(0, len(dates))].date())
-            cust_rows.append({
-                "id": i,
-                "name": f"Customer_{i}",
-                "email": f"customer{i}@example.com",
-                "region": rng.choice(regions),
-                "signup_date": sd,
-                "ltv": round(float(rng.uniform(100, 10000)), 2),
-                "orders": int(rng.integers(1, 100)),
-                "segment": rng.choice(segments),
-            })
+            cust_rows.append(
+                {
+                    "id": i,
+                    "name": f"Customer_{i}",
+                    "email": f"customer{i}@example.com",
+                    "region": rng.choice(regions),
+                    "signup_date": sd,
+                    "ltv": round(float(rng.uniform(100, 10000)), 2),
+                    "orders": int(rng.integers(1, 100)),
+                    "segment": rng.choice(segments),
+                }
+            )
         with engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 INSERT INTO customers (id, name, email, region, signup_date, lifetime_value, orders_count, segment)
                 VALUES (:id, :name, :email, :region, :signup_date, :ltv, :orders, :segment)
-            """), cust_rows)
+            """),
+                cust_rows,
+            )
 
         # Website analytics
         analytics_rows = []
         for i, d in enumerate(dates[:180], 1):
             pv = int(rng.integers(500, 5000))
             uv = int(pv * rng.uniform(0.5, 0.9))
-            analytics_rows.append({
-                "id": i,
-                "date": str(d.date()),
-                "page_views": pv,
-                "unique_visitors": uv,
-                "bounce_rate": round(float(rng.uniform(0.2, 0.7)), 4),
-                "avg_session_duration": round(float(rng.uniform(30, 300)), 2),
-                "conversions": int(rng.integers(0, 50)),
-                "revenue": round(float(rng.uniform(0, 5000)), 2),
-            })
+            analytics_rows.append(
+                {
+                    "id": i,
+                    "date": str(d.date()),
+                    "page_views": pv,
+                    "unique_visitors": uv,
+                    "bounce_rate": round(float(rng.uniform(0.2, 0.7)), 4),
+                    "avg_session_duration": round(float(rng.uniform(30, 300)), 2),
+                    "conversions": int(rng.integers(0, 50)),
+                    "revenue": round(float(rng.uniform(0, 5000)), 2),
+                }
+            )
         with engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(
+                text("""
                 INSERT INTO website_analytics
                     (id, date, page_views, unique_visitors,
                      bounce_rate, avg_session_duration, conversions, revenue)
                 VALUES (:id, :date, :page_views, :unique_visitors,
                         :bounce_rate, :avg_session_duration,
                         :conversions, :revenue)
-            """), analytics_rows)
+            """),
+                analytics_rows,
+            )

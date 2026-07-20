@@ -12,8 +12,15 @@ class QueryBuilder:
             raise ValueError(f"Invalid identifier: {name}")
 
     @classmethod
-    def select(cls, table: str, columns: list[str] | None = None, where: str | None = None,
-               order_by: str | None = None, limit: int | None = None, offset: int | None = None) -> tuple[str, dict]:
+    def select(
+        cls,
+        table: str,
+        columns: list[str] | None = None,
+        where: str | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> tuple[str, dict]:
         cls._validate_identifier(table)
         cols = ", ".join(columns) if columns else "*"
         sql = f"SELECT {cols} FROM {table}"  # noqa: S608
@@ -34,8 +41,15 @@ class QueryBuilder:
         return sql, params
 
     @classmethod
-    def aggregate(cls, table: str, group_col: str, agg_col: str, agg_func: str = "SUM",
-                  where: str | None = None, having: str | None = None) -> tuple[str, dict]:
+    def aggregate(
+        cls,
+        table: str,
+        group_col: str,
+        agg_col: str,
+        agg_func: str = "SUM",
+        where: str | None = None,
+        having: str | None = None,
+    ) -> tuple[str, dict]:
         cls._validate_identifier(table)
         cls._validate_identifier(group_col)
         cls._validate_identifier(agg_col)

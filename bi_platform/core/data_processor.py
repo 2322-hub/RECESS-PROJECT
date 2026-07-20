@@ -59,15 +59,17 @@ class DataProcessor:
             }
             if pd.api.types.is_numeric_dtype(df[col]):
                 desc = df[col].describe()
-                info.update({
-                    "mean": round(float(desc["mean"]), 4),
-                    "std": round(float(desc["std"]), 4),
-                    "min": round(float(desc["min"]), 4),
-                    "25%": round(float(desc["25%"]), 4),
-                    "50%": round(float(desc["50%"]), 4),
-                    "75%": round(float(desc["75%"]), 4),
-                    "max": round(float(desc["max"]), 4),
-                })
+                info.update(
+                    {
+                        "mean": round(float(desc["mean"]), 4),
+                        "std": round(float(desc["std"]), 4),
+                        "min": round(float(desc["min"]), 4),
+                        "25%": round(float(desc["25%"]), 4),
+                        "50%": round(float(desc["50%"]), 4),
+                        "75%": round(float(desc["75%"]), 4),
+                        "max": round(float(desc["max"]), 4),
+                    }
+                )
             profile[col] = info
         return profile
 

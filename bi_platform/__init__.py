@@ -26,8 +26,7 @@ def create_app(config_class=Config):
     # Validate SECRET_KEY in production
     if not app.debug and app.config["SECRET_KEY"] == "change-me":
         raise RuntimeError(
-            "SECRET_KEY must be set to a secure value in production. "
-            "Set the SECRET_KEY environment variable."
+            "SECRET_KEY must be set to a secure value in production. Set the SECRET_KEY environment variable."
         )
 
     socketio.init_app(app, async_mode=app.config["SOCKETIO_ASYNC_MODE"])
@@ -35,9 +34,11 @@ def create_app(config_class=Config):
     limiter.init_app(app)
 
     from .auth import auth_bp
+
     app.register_blueprint(auth_bp)
 
     from .routes import bp as main_bp
+
     app.register_blueprint(main_bp)
 
     logger.info("Application created (debug=%s)", app.debug)

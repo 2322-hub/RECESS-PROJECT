@@ -6,18 +6,20 @@ from bi_platform.core.data_processor import DataProcessor
 
 @pytest.fixture
 def sample_df():
-    return pd.DataFrame({
-        "date": pd.date_range("2024-01-01", periods=100, freq="D").astype(str),
-        "region": ["North", "South", "East", "West"] * 25,
-        "product_category": ["Electronics", "Clothing", "Food", "Furniture"] * 25,
-        "product_name": ["Widget A", "Widget B", "Gadget X", "Gadget Y"] * 25,
-        "quantity": list(range(1, 101)),
-        "unit_price": [10.0] * 100,
-        "total_revenue": [1000.0] * 100,
-        "cost": [500.0] * 100,
-        "profit": [500.0] * 100,
-        "customer_segment": ["Enterprise", "SMB", "Consumer", "Enterprise"] * 25,
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=100, freq="D").astype(str),
+            "region": ["North", "South", "East", "West"] * 25,
+            "product_category": ["Electronics", "Clothing", "Food", "Furniture"] * 25,
+            "product_name": ["Widget A", "Widget B", "Gadget X", "Gadget Y"] * 25,
+            "quantity": list(range(1, 101)),
+            "unit_price": [10.0] * 100,
+            "total_revenue": [1000.0] * 100,
+            "cost": [500.0] * 100,
+            "profit": [500.0] * 100,
+            "customer_segment": ["Enterprise", "SMB", "Consumer", "Enterprise"] * 25,
+        }
+    )
 
 
 @pytest.fixture

@@ -1,5 +1,3 @@
-
-
 class TestRoutes:
     def test_login_page(self, client):
         res = client.get("/login")

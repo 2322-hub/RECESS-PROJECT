@@ -30,11 +30,15 @@ class AnalyticsEngine:
     def monthly_trends(df: pd.DataFrame) -> list[dict]:
         tmp = df.copy()
         tmp["date"] = pd.to_datetime(tmp["date"])
-        monthly = tmp.groupby(tmp["date"].dt.to_period("M")).agg(
-            revenue=("total_revenue", "sum"),
-            profit=("profit", "sum"),
-            quantity=("quantity", "sum"),
-        ).reset_index()
+        monthly = (
+            tmp.groupby(tmp["date"].dt.to_period("M"))
+            .agg(
+                revenue=("total_revenue", "sum"),
+                profit=("profit", "sum"),
+                quantity=("quantity", "sum"),
+            )
+            .reset_index()
+        )
         monthly["date"] = monthly["date"].astype(str)
         return monthly.to_dict(orient="records")
 
@@ -43,12 +47,17 @@ class AnalyticsEngine:
     # ------------------------------------------------------------------
     @staticmethod
     def regional_comparison(df: pd.DataFrame) -> list[dict]:
-        agg = df.groupby("region").agg(
-            revenue=("total_revenue", "sum"),
-            profit=("profit", "sum"),
-            orders=("quantity", "count"),
-            avg_order_value=("total_revenue", "mean"),
-        ).round(2).reset_index()
+        agg = (
+            df.groupby("region")
+            .agg(
+                revenue=("total_revenue", "sum"),
+                profit=("profit", "sum"),
+                orders=("quantity", "count"),
+                avg_order_value=("total_revenue", "mean"),
+            )
+            .round(2)
+            .reset_index()
+        )
         return agg.to_dict(orient="records")
 
     # ------------------------------------------------------------------
@@ -56,11 +65,17 @@ class AnalyticsEngine:
     # ------------------------------------------------------------------
     @staticmethod
     def product_performance(df: pd.DataFrame) -> list[dict]:
-        agg = df.groupby(["product_category", "product_name"]).agg(
-            revenue=("total_revenue", "sum"),
-            profit=("profit", "sum"),
-            quantity=("quantity", "sum"),
-        ).round(2).sort_values("revenue", ascending=False).reset_index()
+        agg = (
+            df.groupby(["product_category", "product_name"])
+            .agg(
+                revenue=("total_revenue", "sum"),
+                profit=("profit", "sum"),
+                quantity=("quantity", "sum"),
+            )
+            .round(2)
+            .sort_values("revenue", ascending=False)
+            .reset_index()
+        )
         return agg.to_dict(orient="records")
 
     # ------------------------------------------------------------------
@@ -79,11 +94,15 @@ class AnalyticsEngine:
             "total_revenue": round(float(tmp["revenue"].sum()), 2),
             "conversion_rate": round(float(tmp["conversions"].sum() / max(tmp["unique_visitors"].sum(), 1) * 100), 2),
         }
-        daily = tmp.groupby("date").agg(
-            page_views=("page_views", "sum"),
-            visitors=("unique_visitors", "sum"),
-            revenue=("revenue", "sum"),
-        ).reset_index()
+        daily = (
+            tmp.groupby("date")
+            .agg(
+                page_views=("page_views", "sum"),
+                visitors=("unique_visitors", "sum"),
+                revenue=("revenue", "sum"),
+            )
+            .reset_index()
+        )
         daily["date"] = daily["date"].astype(str)
         summary["daily_trend"] = daily.to_dict(orient="records")
         return summary
@@ -98,15 +117,23 @@ class AnalyticsEngine:
             "avg_lifetime_value": round(float(cust_df["lifetime_value"].mean()), 2),
             "total_lifetime_value": round(float(cust_df["lifetime_value"].sum()), 2),
             "avg_orders": round(float(cust_df["orders_count"].mean()), 2),
-            "by_segment": cust_df.groupby("segment").agg(
+            "by_segment": cust_df.groupby("segment")
+            .agg(
                 count=("id", "count"),
                 avg_ltv=("lifetime_value", "mean"),
                 total_ltv=("lifetime_value", "sum"),
-            ).round(2).reset_index().to_dict(orient="records"),
-            "by_region": cust_df.groupby("region").agg(
+            )
+            .round(2)
+            .reset_index()
+            .to_dict(orient="records"),
+            "by_region": cust_df.groupby("region")
+            .agg(
                 count=("id", "count"),
                 avg_ltv=("lifetime_value", "mean"),
-            ).round(2).reset_index().to_dict(orient="records"),
+            )
+            .round(2)
+            .reset_index()
+            .to_dict(orient="records"),
         }
 
     # ------------------------------------------------------------------

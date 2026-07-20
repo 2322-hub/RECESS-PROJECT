@@ -10,45 +10,51 @@ def sample_sales():
     rng = np.random.default_rng(42)
     n = 200
     dates = pd.date_range("2024-01-01", periods=365, freq="D")
-    return pd.DataFrame({
-        "date": [str(dates[rng.integers(0, len(dates))].date()) for _ in range(n)],
-        "region": rng.choice(["North", "South", "East", "West"], n).tolist(),
-        "product_category": rng.choice(["Electronics", "Clothing", "Food"], n).tolist(),
-        "product_name": rng.choice(["Widget A", "Widget B", "Gadget X"], n).tolist(),
-        "quantity": rng.integers(1, 50, n).tolist(),
-        "unit_price": rng.uniform(5, 500, n).tolist(),
-        "total_revenue": rng.uniform(100, 10000, n).tolist(),
-        "cost": rng.uniform(50, 5000, n).tolist(),
-        "profit": rng.uniform(50, 5000, n).tolist(),
-        "customer_segment": rng.choice(["Enterprise", "SMB"], n).tolist(),
-    })
+    return pd.DataFrame(
+        {
+            "date": [str(dates[rng.integers(0, len(dates))].date()) for _ in range(n)],
+            "region": rng.choice(["North", "South", "East", "West"], n).tolist(),
+            "product_category": rng.choice(["Electronics", "Clothing", "Food"], n).tolist(),
+            "product_name": rng.choice(["Widget A", "Widget B", "Gadget X"], n).tolist(),
+            "quantity": rng.integers(1, 50, n).tolist(),
+            "unit_price": rng.uniform(5, 500, n).tolist(),
+            "total_revenue": rng.uniform(100, 10000, n).tolist(),
+            "cost": rng.uniform(50, 5000, n).tolist(),
+            "profit": rng.uniform(50, 5000, n).tolist(),
+            "customer_segment": rng.choice(["Enterprise", "SMB"], n).tolist(),
+        }
+    )
 
 
 @pytest.fixture
 def sample_customers():
-    return pd.DataFrame({
-        "id": range(1, 51),
-        "name": [f"Customer_{i}" for i in range(1, 51)],
-        "email": [f"cust{i}@test.com" for i in range(1, 51)],
-        "region": ["North"] * 25 + ["South"] * 25,
-        "signup_date": ["2024-01-01"] * 50,
-        "lifetime_value": np.linspace(100, 10000, 50).tolist(),
-        "orders_count": list(range(1, 51)),
-        "segment": ["Enterprise"] * 25 + ["SMB"] * 25,
-    })
+    return pd.DataFrame(
+        {
+            "id": range(1, 51),
+            "name": [f"Customer_{i}" for i in range(1, 51)],
+            "email": [f"cust{i}@test.com" for i in range(1, 51)],
+            "region": ["North"] * 25 + ["South"] * 25,
+            "signup_date": ["2024-01-01"] * 50,
+            "lifetime_value": np.linspace(100, 10000, 50).tolist(),
+            "orders_count": list(range(1, 51)),
+            "segment": ["Enterprise"] * 25 + ["SMB"] * 25,
+        }
+    )
 
 
 @pytest.fixture
 def sample_website():
-    return pd.DataFrame({
-        "date": pd.date_range("2024-01-01", periods=90, freq="D").astype(str),
-        "page_views": np.random.randint(500, 5000, 90).tolist(),
-        "unique_visitors": np.random.randint(200, 3000, 90).tolist(),
-        "bounce_rate": np.random.uniform(0.2, 0.7, 90).tolist(),
-        "avg_session_duration": np.random.uniform(30, 300, 90).tolist(),
-        "conversions": np.random.randint(0, 50, 90).tolist(),
-        "revenue": np.random.uniform(0, 5000, 90).tolist(),
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=90, freq="D").astype(str),
+            "page_views": np.random.randint(500, 5000, 90).tolist(),
+            "unique_visitors": np.random.randint(200, 3000, 90).tolist(),
+            "bounce_rate": np.random.uniform(0.2, 0.7, 90).tolist(),
+            "avg_session_duration": np.random.uniform(30, 300, 90).tolist(),
+            "conversions": np.random.randint(0, 50, 90).tolist(),
+            "revenue": np.random.uniform(0, 5000, 90).tolist(),
+        }
+    )
 
 
 @pytest.fixture

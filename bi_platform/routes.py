@@ -102,12 +102,14 @@ def api_custom_query():
     try:
         df = db_connector.execute_query("demo", sql)
         limited = df.head(Config.SQL_MAX_ROWS)
-        return _json_response({
-            "columns": list(limited.columns),
-            "rows": limited.to_dict(orient="records"),
-            "row_count": len(df),
-            "truncated": len(df) > Config.SQL_MAX_ROWS,
-        })
+        return _json_response(
+            {
+                "columns": list(limited.columns),
+                "rows": limited.to_dict(orient="records"),
+                "row_count": len(df),
+                "truncated": len(df) > Config.SQL_MAX_ROWS,
+            }
+        )
     except Exception as exc:
         logger.warning("Query failed: %s", exc)
         return jsonify({"error": str(exc)}), 400
@@ -124,9 +126,7 @@ def api_table_data(table_name: str):
     search = request.args.get("search", None)
     df = _get_cached(table_name)
     if search:
-        mask = df.apply(
-            lambda col: col.astype(str).str.contains(search, case=False, na=False)
-        ).any(axis=1)
+        mask = df.apply(lambda col: col.astype(str).str.contains(search, case=False, na=False)).any(axis=1)
         df = df[mask]
     if sort:
         desc = sort.startswith("-")
@@ -136,14 +136,16 @@ def api_table_data(table_name: str):
     total = len(df)
     start = (page - 1) * per_page
     chunk = df.iloc[start : start + per_page]
-    return _json_response({
-        "columns": list(chunk.columns),
-        "rows": chunk.to_dict(orient="records"),
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "pages": (total + per_page - 1) // per_page,
-    })
+    return _json_response(
+        {
+            "columns": list(chunk.columns),
+            "rows": chunk.to_dict(orient="records"),
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page,
+        }
+    )
 
 
 @bp.route("/api/connect", methods=["POST"])
