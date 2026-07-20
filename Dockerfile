@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# ---- Build stage ----
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -10,14 +11,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
+# ---- Runtime stage ----
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    unixodbc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
 COPY . .
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 5000
 
-ENV SECRET_KEY=change-me
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
 ENV FLASK_DEBUG=false
-ENV ADMIN_PASSWORD=admin123
 
 CMD ["python", "run.py"]

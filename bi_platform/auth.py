@@ -1,44 +1,25 @@
 import os
 from functools import wraps
 
-from flask import (
-    Blueprint,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
-)
+from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from sqlalchemy import select
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import limiter, logger
+from . import csrf, limiter, logger
+from .models import SessionLocal, User
 
 auth_bp = Blueprint("auth", __name__)
 
-_users_db: dict[str, dict] = {}
-
 DEFAULT_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 DEFAULT_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
-
-
-def _init_default_user():
-    if DEFAULT_USERNAME not in _users_db:
-        _users_db[DEFAULT_USERNAME] = {
-            "username": DEFAULT_USERNAME,
-            "password": generate_password_hash(DEFAULT_PASSWORD),
-            "role": "admin",
-        }
-        logger.info("Default user '%s' created", DEFAULT_USERNAME)
-
-
-_init_default_user()
 
 
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if "user" not in session:
+            if request.is_json or request.accept_mimetypes.best == "application/json":
+                return jsonify({"error": "Authentication required"}), 401
             return redirect(url_for("auth.login"))
         return f(*args, **kwargs)
 
@@ -46,19 +27,24 @@ def login_required(f):
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
-@limiter.exempt
+@limiter.limit("20/minute")
 def login():
     error = None
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
-        user = _users_db.get(username)
-        if user and check_password_hash(user["password"], password):
-            session["user"] = username
-            session["role"] = user["role"]
-            logger.info("User '%s' logged in", username)
-            return redirect(url_for("main.index"))
-        error = "Invalid username or password"
+        session_local = SessionLocal()
+        try:
+            user = session_local.execute(select(User).where(User.username == username)).scalar_one_or_none()
+            if user and check_password_hash(user.password_hash, password):
+                session.regenerate = True
+                session["user"] = username
+                session["role"] = user.role
+                logger.info("User '%s' logged in", username)
+                return redirect(url_for("main.index"))
+            error = "Invalid username or password"
+        finally:
+            session_local.close()
     return render_template("login.html", error=error)
 
 
@@ -80,16 +66,24 @@ def register_page():
             error = "Password must be at least 8 characters"
         elif password != confirm:
             error = "Passwords do not match"
-        elif username in _users_db:
-            error = "Username already exists"
         else:
-            _users_db[username] = {
-                "username": username,
-                "password": generate_password_hash(password),
-                "role": "viewer",
-            }
-            logger.info("New user '%s' registered", username)
-            success = "Account created! You can now sign in."
+            session_local = SessionLocal()
+            try:
+                existing = session_local.execute(select(User).where(User.username == username)).scalar_one_or_none()
+                if existing:
+                    error = "Username already exists"
+                else:
+                    user = User(
+                        username=username,
+                        password_hash=generate_password_hash(password),
+                        role="viewer",
+                    )
+                    session_local.add(user)
+                    session_local.commit()
+                    logger.info("New user '%s' registered", username)
+                    success = "Account created! You can now sign in."
+            finally:
+                session_local.close()
 
     return render_template("register.html", error=error, success=success)
 
@@ -99,6 +93,7 @@ def register_page():
 def logout():
     user = session.pop("user", None)
     session.pop("role", None)
+    session.clear()
     logger.info("User '%s' logged out", user)
     return redirect(url_for("auth.login"))
 
@@ -116,13 +111,25 @@ def register():
         return jsonify({"error": "Username must be at least 3 characters"}), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
-    if username in _users_db:
-        return jsonify({"error": "Username already exists"}), 409
 
-    _users_db[username] = {
-        "username": username,
-        "password": generate_password_hash(password),
-        "role": "viewer",
-    }
-    logger.info("New user '%s' registered", username)
-    return jsonify({"status": "ok", "message": "Registration successful"})
+    session_local = SessionLocal()
+    try:
+        existing = session_local.execute(select(User).where(User.username == username)).scalar_one_or_none()
+        if existing:
+            return jsonify({"error": "Username already exists"}), 409
+
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            role="viewer",
+        )
+        session_local.add(user)
+        session_local.commit()
+        logger.info("New user '%s' registered", username)
+        return jsonify({"status": "ok", "message": "Registration successful"})
+    finally:
+        session_local.close()
+
+
+csrf.exempt(register)
+csrf.exempt(register_page)

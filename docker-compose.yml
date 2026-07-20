@@ -1,31 +1,52 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    profiles:
+      - production
+
   web:
     build: .
     ports:
       - "5000:5000"
+    depends_on:
+      - redis
     environment:
-      - SECRET_KEY=${SECRET_KEY:-supersecretkey123}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
       - FLASK_DEBUG=${FLASK_DEBUG:-false}
       - DATABASE_URL=${DATABASE_URL:-sqlite:///bi_platform_demo.db}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RATELIMIT_STORAGE_URI=${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/login')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    profiles:
+      - production
 
   dev:
     build: .
     ports:
       - "5000:5000"
+    depends_on:
+      - redis
     environment:
-      - SECRET_KEY=devsecretkey
+      - SECRET_KEY=${SECRET_KEY:-dev-only-secret-key-do-not-use-in-prod}
       - FLASK_DEBUG=true
-      - ADMIN_PASSWORD=admin123
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RATELIMIT_STORAGE_URI=${RATELIMIT_STORAGE_URI:-memory://}
+      - LOG_FORMAT=text
     volumes:
       - .:/app
     command: python run.py

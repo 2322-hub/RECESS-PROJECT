@@ -7,6 +7,7 @@
 
   // ─── State ───
   let DATA = {};
+  let filteredKpis = null;
   const charts = {};
 
   // ─── Colour palette ───
@@ -51,10 +52,10 @@
     const el = document.getElementById(containerId);
     if (!el) return;
     const cards = [
-      { label: "Total Revenue", value: "$" + formatNum(kpis.total_revenue), cls: "kpi-blue" },
-      { label: "Total Profit", value: "$" + formatNum(kpis.total_profit), cls: "kpi-green" },
+      { label: "Total Revenue", value: "UGX " + formatNum(kpis.total_revenue), cls: "kpi-blue" },
+      { label: "Total Profit", value: "UGX " + formatNum(kpis.total_profit), cls: "kpi-green" },
       { label: "Profit Margin", value: (kpis.profit_margin || 0).toFixed(1) + "%", cls: "kpi-orange" },
-      { label: "Total Cost", value: "$" + formatNum(kpis.total_cost), cls: "kpi-red" },
+      { label: "Total Cost", value: "UGX " + formatNum(kpis.total_cost), cls: "kpi-red" },
       { label: "Records", value: formatNum(kpis.record_count), cls: "kpi-purple" },
     ];
     if (scheme === "website") {
@@ -71,8 +72,8 @@
       cards.length = 0;
       cards.push(
         { label: "Total Customers", value: formatNum(kpis.total_customers), cls: "kpi-blue" },
-        { label: "Avg LTV", value: "$" + formatNum(kpis.avg_lifetime_value), cls: "kpi-green" },
-        { label: "Total LTV", value: "$" + formatNum(kpis.total_lifetime_value), cls: "kpi-orange" },
+        { label: "Avg LTV", value: "UGX " + formatNum(kpis.avg_lifetime_value), cls: "kpi-green" },
+        { label: "Total LTV", value: "UGX " + formatNum(kpis.total_lifetime_value), cls: "kpi-orange" },
         { label: "Avg Orders", value: kpis.avg_orders, cls: "kpi-purple" },
       );
     }
@@ -202,9 +203,9 @@
     });
 
     const pp = d.product_performance || [];
-    var tableHtml = '<table><thead><tr><th>Category</th><th>Product</th><th>Revenue</th><th>Profit</th><th>Quantity</th></tr></thead><tbody>';
+    let tableHtml = '<table><thead><tr><th>Category</th><th>Product</th><th>Revenue</th><th>Profit</th><th>Quantity</th></tr></thead><tbody>';
     pp.forEach(function(p) {
-      tableHtml += '<tr><td>' + escapeHtml(p.product_category) + '</td><td>' + escapeHtml(p.product_name) + '</td><td>$' + escapeHtml(formatNum(p.revenue)) + '</td><td>$' + escapeHtml(formatNum(p.profit)) + '</td><td>' + escapeHtml(formatNum(p.quantity)) + '</td></tr>';
+      tableHtml += '<tr><td>' + escapeHtml(p.product_category) + '</td><td>' + escapeHtml(p.product_name) + '</td><td>UGX ' + escapeHtml(formatNum(p.revenue)) + '</td><td>UGX ' + escapeHtml(formatNum(p.profit)) + '</td><td>' + escapeHtml(formatNum(p.quantity)) + '</td></tr>';
     });
     tableHtml += '</tbody></table>';
     document.getElementById("productTable").innerHTML = tableHtml;
@@ -276,14 +277,43 @@
     buildCustomerCharts(d);
   }
 
+  // ─── Error banner ───
+  function showError(msg) {
+    let bar = document.getElementById("errorBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "errorBar";
+      bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;padding:12px 20px;background:#ef4444;color:#fff;text-align:center;font-size:14px;cursor:pointer;";
+      document.body.prepend(bar);
+    }
+    bar.textContent = msg;
+    bar.style.display = "block";
+    bar.onclick = () => { bar.style.display = "none"; };
+    setTimeout(() => { if (bar) bar.style.display = "none"; }, 8000);
+  }
+  function hideError() {
+    const bar = document.getElementById("errorBar");
+    if (bar) bar.style.display = "none";
+  }
+
   // ─── Data Fetching ───
   async function fetchData() {
+    const conn = (document.getElementById("activeConn") || {}).value || "demo";
     try {
-      const res = await fetch("/api/dashboard-data");
+      const res = await fetch("/api/v1/dashboard-data?conn=" + encodeURIComponent(conn));
       if (res.status === 401 || res.redirected) { window.location.href = "/login"; return; }
-      const d = await res.json();
+      const text = await res.text();
+      let d;
+      try { d = JSON.parse(text); } catch (_) { showError("Server error (HTTP " + res.status + "). Check server logs."); console.error("Non-JSON response:", text.slice(0, 500)); return; }
+      if (d.error) { showError("Data load error: " + d.error + " (conn: " + (d.conn || conn) + ")"); console.error("API error:", d); return; }
+      hideError();
       renderAll(d);
+      populateFilters(d);
+      if (d._conn && d._conn !== "demo") {
+        console.log("Dashboard loaded from '" + d._conn + "': " + d._sales_rows + " sales rows");
+      }
     } catch (e) {
+      showError("Failed to load dashboard data: " + e.message);
       console.error("Failed to load dashboard data", e);
     }
   }
@@ -304,6 +334,7 @@
   function fillSelect(id, vals) {
     const sel = document.getElementById(id);
     if (!sel) return;
+    const prevValue = sel.value;
     const first = sel.options[0];
     sel.innerHTML = "";
     sel.appendChild(first);
@@ -312,11 +343,16 @@
       o.value = v; o.textContent = v;
       sel.appendChild(o);
     });
+    if (prevValue && [...sel.options].some(o => o.value === prevValue)) {
+      sel.value = prevValue;
+    }
   }
 
   async function applyFilters() {
+    const conn = (document.getElementById("activeConn") || {}).value || "demo";
     const body = {
       table: "sales",
+      conn: conn,
       filters: {
         region: document.getElementById("regionFilter").value,
         product_category: document.getElementById("categoryFilter").value,
@@ -324,8 +360,9 @@
       },
     };
     try {
-      const res = await fetch("/api/filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch("/api/v1/filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await res.json();
+      filteredKpis = d.kpis;
       renderKpis("kpiRow", d.kpis);
     } catch (e) { console.error(e); }
   }
@@ -366,38 +403,59 @@
     const name = $("#dbName").value.trim();
     const connStr = $("#dbConnStr").value.trim();
     if (!name || !connStr) return;
+    let res;
     try {
-      const res = await fetch("/api/connect", {
+      res = await fetch("/api/v1/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, connection_string: connStr }),
       });
       const d = await res.json();
       if (d.error) { alert(d.error); return; }
+      if (!res.ok) { alert("Error: " + (d.error || res.status)); return; }
       document.getElementById("dbModal").classList.remove("show");
+      await populateActiveConn();
+      const sel = document.getElementById("activeConn");
+      sel.value = name;
       fetchData();
-    } catch (e) { alert("Connection failed: " + e.message); }
+    } catch (e) {
+      if (e instanceof SyntaxError && res) {
+        try { const t = await res.text(); alert("Server returned: status=" + res.status + "\n\n" + t.slice(0, 300)); } catch (_) { alert("Connection failed: " + e.message); }
+      } else { alert("Connection failed: " + e.message); }
+    }
   });
 
   // ─── Data Explorer ───
   let explorerPage = 1;
+  async function loadExplorerTables() {
+    const conn = document.getElementById("explorerConn").value;
+    try {
+      const res = await fetch("/api/v1/tables?conn=" + encodeURIComponent(conn));
+      const tables = await res.json();
+      const sel = document.getElementById("explorerTable");
+      sel.innerHTML = tables.map(t => '<option value="' + t + '">' + t + '</option>').join("");
+      if (tables.length) loadExplorer();
+    } catch (e) { console.error(e); }
+  }
   async function loadExplorer() {
+    const conn = document.getElementById("explorerConn").value;
     const table = document.getElementById("explorerTable").value;
     const search = document.getElementById("explorerSearch").value;
     if (!table) return;
     try {
-      const res = await fetch("/api/data/" + encodeURIComponent(table) + "?page=" + explorerPage + "&per_page=50&search=" + encodeURIComponent(search));
+      const res = await fetch("/api/v1/data/" + encodeURIComponent(table) + "?conn=" + encodeURIComponent(conn) + "&page=" + explorerPage + "&per_page=50&search=" + encodeURIComponent(search));
       const d = await res.json();
       renderTable("explorerTableWrap", d.columns, d.rows);
       renderPagination("explorerPagination", d.pages, d.page, (p) => { explorerPage = p; loadExplorer(); });
     } catch (e) { console.error(e); }
   }
+  $("#explorerConn").addEventListener("change", loadExplorerTables);
   $("#explorerLoad").addEventListener("click", loadExplorer);
 
   function renderTable(containerId, columns, rows) {
     const el = document.getElementById(containerId);
     if (!columns || !rows) { el.innerHTML = "<p>No data</p>"; return; }
-    var html = "<table><thead><tr>";
+    let html = "<table><thead><tr>";
     columns.forEach(c => { html += "<th>" + escapeHtml(c) + "</th>"; });
     html += "</tr></thead><tbody>";
     rows.forEach(r => {
@@ -424,30 +482,60 @@
     });
   }
 
-  // ─── Populate explorer table dropdown ───
-  async function loadExplorerTables() {
+  // ─── SQL Query ───
+  async function loadConnections() {
     try {
-      const res = await fetch("/api/tables");
-      const tables = await res.json();
-      const sel = document.getElementById("explorerTable");
-      tables.forEach(t => { const o = document.createElement("option"); o.value = t; o.textContent = t; sel.appendChild(o); });
+      const res = await fetch("/api/v1/connections");
+      const names = await res.json();
+      const sel = document.getElementById("sqlConnection");
+      sel.innerHTML = "";
+      names.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); });
+    } catch (e) { console.error(e); }
+  }
+  $("#sqlRunBtn").addEventListener("click", async () => {
+    const conn = document.getElementById("sqlConnection").value;
+    const sql = document.getElementById("sqlEditor").value.trim();
+    if (!sql) return;
+    const el = document.getElementById("sqlResult");
+    el.innerHTML = "<p>Running...</p>";
+    try {
+      const res = await fetch("/api/v1/custom-query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connection: conn, sql }),
+      });
+      const d = await res.json();
+      if (d.error) { el.innerHTML = "<p style='color:var(--red)'>" + escapeHtml(d.error) + "</p>"; return; }
+      renderTable("sqlResult", d.columns, d.rows || []);
+    } catch (e) { el.innerHTML = "<p style='color:var(--red)'>Error: " + escapeHtml(e.message) + "</p>"; }
+  });
+  $("#sqlClearBtn").addEventListener("click", () => { document.getElementById("sqlResult").innerHTML = ""; });
+
+  // ─── Populate connection dropdown and load tables ───
+  async function initExplorer() {
+    try {
+      const res = await fetch("/api/v1/connections");
+      const names = await res.json();
+      const sel = document.getElementById("explorerConn");
+      names.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); });
+      loadExplorerTables();
     } catch (e) { console.error(e); }
   }
 
   // ─── WebSocket real-time ───
   const socket = io();
   socket.on("connect", () => {
-    var el = document.getElementById("connStatus");
+    const el = document.getElementById("connStatus");
     el.textContent = "";
-    var dot = document.createElement("span");
+    const dot = document.createElement("span");
     dot.className = "status-dot";
     el.appendChild(dot);
     el.appendChild(document.createTextNode(" Real-time connected"));
   });
   socket.on("disconnect", () => {
-    var el = document.getElementById("connStatus");
+    const el = document.getElementById("connStatus");
     el.textContent = "";
-    var dot = document.createElement("span");
+    const dot = document.createElement("span");
     dot.className = "status-dot";
     dot.style.background = "var(--red)";
     el.appendChild(dot);
@@ -456,11 +544,35 @@
   socket.on("dashboard_update", (d) => {
     renderAll(d);
     populateFilters(d);
+    const anyFilterActive = ["regionFilter", "categoryFilter", "segmentFilter"].some(
+      id => document.getElementById(id)?.value
+    );
+    if (anyFilterActive && filteredKpis) {
+      renderKpis("kpiRow", filteredKpis);
+    }
   });
+
+  // ─── Populate active connection dropdown ───
+  async function populateActiveConn() {
+    try {
+      const res = await fetch("/api/v1/connections");
+      const names = await res.json();
+      const sel = document.getElementById("activeConn");
+      const defaultConn = document.getElementById("defaultConn").value || "demo";
+      const current = sel.value;
+      sel.innerHTML = names.map(n => '<option value="' + n + '">' + n + '</option>').join("");
+      if (names.includes(current)) sel.value = current;
+      else if (names.includes(defaultConn)) sel.value = defaultConn;
+      else sel.value = names[0];
+    } catch (e) { console.error(e); }
+  }
+  $("#activeConn").addEventListener("change", fetchData);
 
   // ─── Init ───
   (async function init() {
+    await populateActiveConn();
     await fetchData();
-    await loadExplorerTables();
+    initExplorer();
+    loadConnections();
   })();
 })();

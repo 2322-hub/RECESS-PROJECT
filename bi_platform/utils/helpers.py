@@ -48,7 +48,13 @@ def safe_json_serialize(obj):
     """Make objects JSON-serialisable (handles numpy types)."""
     import numpy as np
     import pandas as pd
+    from datetime import date, datetime
+    from decimal import Decimal
 
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return float(obj)
     if isinstance(obj, (np.integer,)):
         return int(obj)
     if isinstance(obj, (np.floating,)):

@@ -18,7 +18,6 @@ class DatabaseConnector:
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=10,
-            connect_args={"timeout": Config.QUERY_TIMEOUT},
         )
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -157,7 +156,7 @@ class DatabaseConnector:
             cat = rng.choice(categories)
             prod = rng.choice(products)
             qty = int(rng.integers(1, 50))
-            price = round(float(rng.uniform(5, 500)), 2)
+            price = round(float(rng.uniform(5000, 500000)), 2)
             total = round(qty * price, 2)
             cost = round(total * rng.uniform(0.3, 0.8), 2)
             sales_rows.append(
@@ -211,7 +210,7 @@ class DatabaseConnector:
                     "email": f"customer{i}@example.com",
                     "region": rng.choice(regions),
                     "signup_date": sd,
-                    "ltv": round(float(rng.uniform(100, 10000)), 2),
+                    "ltv": round(float(rng.uniform(500000, 50000000)), 2),
                     "orders": int(rng.integers(1, 100)),
                     "segment": rng.choice(segments),
                 }
@@ -239,7 +238,7 @@ class DatabaseConnector:
                     "bounce_rate": round(float(rng.uniform(0.2, 0.7)), 4),
                     "avg_session_duration": round(float(rng.uniform(30, 300)), 2),
                     "conversions": int(rng.integers(0, 50)),
-                    "revenue": round(float(rng.uniform(0, 5000)), 2),
+                    "revenue": round(float(rng.uniform(0, 20000000)), 2),
                 }
             )
         with engine.begin() as conn:
