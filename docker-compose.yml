@@ -1,0 +1,33 @@
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-supersecretkey123}
+      - FLASK_DEBUG=${FLASK_DEBUG:-false}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///bi_platform_demo.db}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/login')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  dev:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=devsecretkey
+      - FLASK_DEBUG=true
+      - ADMIN_PASSWORD=admin123
+    volumes:
+      - .:/app
+    command: python run.py
+    profiles:
+      - development

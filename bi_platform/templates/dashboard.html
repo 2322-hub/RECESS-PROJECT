@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BI Platform — Data Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4" integrity="sha384-Ti8W3k3sMREnVH0R0bJGcUyN0K1V2lG9aM9Qp6H6w6H6w6H6w6H6w6H6w6H6w6H6" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js" integrity="sha384-i2qJ4uW4rK3w4r4b2sPf2gZ0W3bL6w6H6w6H6w6H6w6H6w6H6w6H6w6H6w6H6w6H6" crossorigin="anonymous"></script>
+</head>
+<body>
+  <!-- ─── SIDEBAR ─── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">BI Platform</div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-link active" data-section="overview">Overview</a>
+      <a href="#" class="nav-link" data-section="revenue">Revenue</a>
+      <a href="#" class="nav-link" data-section="products">Products</a>
+      <a href="#" class="nav-link" data-section="website">Website</a>
+      <a href="#" class="nav-link" data-section="customers">Customers</a>
+      <a href="#" class="nav-link" data-section="data-explorer">Data Explorer</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="connection-status" id="connStatus">
+        <span class="status-dot"></span> Real-time connected
+      </div>
+      <a href="{{ url_for('auth.logout') }}" class="nav-link" style="border-left:none;padding:.7rem 1.5rem;margin-top:.5rem;">Logout</a>
+    </div>
+  </aside>
+
+  <!-- ─── MAIN ─── -->
+  <main class="main">
+    <!-- Top bar -->
+    <header class="topbar">
+      <button class="menu-toggle" id="menuToggle">&#9776;</button>
+      <h1 class="topbar-title" id="pageTitle">Overview</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-sm" id="refreshBtn">&#8635; Refresh</button>
+        <button class="btn btn-sm btn-accent" id="connectDbBtn">+ Connect DB</button>
+        <div class="filter-group">
+          <select id="regionFilter"><option value="">All Regions</option></select>
+          <select id="categoryFilter"><option value="">All Categories</option></select>
+          <select id="segmentFilter"><option value="">All Segments</option></select>
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══ OVERVIEW ═══ -->
+    <section class="section active" id="sec-overview">
+      <div class="kpi-row" id="kpiRow"></div>
+      <div class="grid grid-2">
+        <div class="card"><canvas id="chartRevenueTrend"></canvas></div>
+        <div class="card"><canvas id="chartRegionBar"></canvas></div>
+      </div>
+      <div class="grid grid-3">
+        <div class="card"><canvas id="chartCategoryPie"></canvas></div>
+        <div class="card"><canvas id="chartSegmentDonut"></canvas></div>
+        <div class="card"><canvas id="chartProfitMargin"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ═══ REVENUE ═══ -->
+    <section class="section" id="sec-revenue">
+      <div class="kpi-row" id="revenueKpis"></div>
+      <div class="grid grid-2">
+        <div class="card"><canvas id="chartMonthlyRev"></canvas></div>
+        <div class="card"><canvas id="chartMonthlyProfit"></canvas></div>
+      </div>
+      <div class="card"><canvas id="chartRegionalTable"></canvas></div>
+    </section>
+
+    <!-- ═══ PRODUCTS ═══ -->
+    <section class="section" id="sec-products">
+      <div class="grid grid-2">
+        <div class="card"><canvas id="chartTopProducts"></canvas></div>
+        <div class="card"><canvas id="chartCategoryRevenue"></canvas></div>
+      </div>
+      <div class="card" id="productTableCard">
+        <h3>Product Performance</h3>
+        <div class="table-wrap" id="productTable"></div>
+      </div>
+    </section>
+
+    <!-- ═══ WEBSITE ═══ -->
+    <section class="section" id="sec-website">
+      <div class="kpi-row" id="websiteKpis"></div>
+      <div class="grid grid-2">
+        <div class="card"><canvas id="chartPageViews"></canvas></div>
+        <div class="card"><canvas id="chartConversions"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ═══ CUSTOMERS ═══ -->
+    <section class="section" id="sec-customers">
+      <div class="kpi-row" id="customerKpis"></div>
+      <div class="grid grid-2">
+        <div class="card"><canvas id="chartCustSegment"></canvas></div>
+        <div class="card"><canvas id="chartCustRegion"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ═══ DATA EXPLORER ═══ -->
+    <section class="section" id="sec-data-explorer">
+      <div class="explorer-controls">
+        <select id="explorerTable"></select>
+        <input type="text" id="explorerSearch" placeholder="Search..." />
+        <button class="btn btn-sm btn-accent" id="explorerLoad">Load</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap" id="explorerTableWrap"></div>
+        <div class="pagination" id="explorerPagination"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ═══ MODAL ═══ -->
+  <div class="modal-overlay" id="dbModal">
+    <div class="modal">
+      <h3>Connect to Database</h3>
+      <label>Name <input type="text" id="dbName" placeholder="mydb" /></label>
+      <label>Connection String
+        <input type="text" id="dbConnStr" placeholder="postgresql://user:pass@host/db" />
+      </label>
+      <div class="modal-actions">
+        <button class="btn" id="dbModalCancel">Cancel</button>
+        <button class="btn btn-accent" id="dbModalConnect">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
