@@ -61,6 +61,16 @@ jobs:
             -e SECRET_KEY=testkey123 \
             -e FLASK_DEBUG=false \
             bi-platform:${{ github.sha }}
-          sleep 10
-          curl -f http://localhost:5000/login || (docker logs test && exit 1)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5000/login > /dev/null 2>&1; then
+              echo "Container is ready after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Container failed to start within 30s"
+              docker logs test
+              exit 1
+            fi
+            sleep 1
+          done
           docker stop test
