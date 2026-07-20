@@ -23,6 +23,7 @@ env/
 # Environment
 .env
 .env.local
+.secret_key
 
 # Database files
 *.db

@@ -1,9 +1,25 @@
 import os
 import secrets
+from pathlib import Path
+
+
+def _get_or_create_secret_key() -> str:
+    """Return SECRET_KEY from env, or persist a generated one in .secret_key file."""
+    env_key = os.environ.get("SECRET_KEY")
+    if env_key:
+        return env_key
+
+    key_file = Path(".secret_key")
+    if key_file.exists():
+        return key_file.read_text().strip()
+
+    key = secrets.token_hex(32)
+    key_file.write_text(key)
+    return key
 
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+    SECRET_KEY = _get_or_create_secret_key()
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
         "sqlite:///bi_platform_demo.db",

@@ -61,6 +61,38 @@ def login():
     return render_template("login.html", error=error)
 
 
+@auth_bp.route("/register", methods=["GET", "POST"])
+@limiter.limit("5/minute")
+def register_page():
+    error = None
+    success = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+
+        if not username or not password:
+            error = "Username and password are required"
+        elif len(username) < 3:
+            error = "Username must be at least 3 characters"
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters"
+        elif password != confirm:
+            error = "Passwords do not match"
+        elif username in _users_db:
+            error = "Username already exists"
+        else:
+            _users_db[username] = {
+                "username": username,
+                "password": generate_password_hash(password),
+                "role": "viewer",
+            }
+            logger.info("New user '%s' registered", username)
+            success = "Account created! You can now sign in."
+
+    return render_template("register.html", error=error, success=success)
+
+
 @auth_bp.route("/logout")
 @limiter.exempt
 def logout():
