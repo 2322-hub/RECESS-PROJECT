@@ -1,5 +1,6 @@
 import pandas as pd
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import make_url
 
 from ..config import Config
 
@@ -13,12 +14,21 @@ class DatabaseConnector:
 
     def connect(self, name: str, connection_string: str) -> dict:
         """Register a named database connection via SQLAlchemy URL."""
+        connect_args = {}
+        url = make_url(connection_string)
+        if url.drivername.startswith("postgresql"):
+            connect_args["connect_timeout"] = Config.QUERY_TIMEOUT
+        elif url.drivername.startswith("mysql"):
+            connect_args["connect_timeout"] = Config.QUERY_TIMEOUT
+        elif url.drivername.startswith("mssql"):
+            connect_args["timeout"] = Config.QUERY_TIMEOUT
+
         engine = create_engine(
             connection_string,
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=10,
-            connect_args={"timeout": Config.QUERY_TIMEOUT},
+            connect_args=connect_args,
         )
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
