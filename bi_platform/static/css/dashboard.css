@@ -157,6 +157,10 @@ textarea {
 }
 .modal-actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: 1.2rem; }
 
+/* ─── Accessibility ─── */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.sr-only:focus { position: static; width: auto; height: auto; padding: 8px; margin: 0; overflow: visible; clip: auto; white-space: normal; }
+
 /* ─── Utility ─── */
 .mt-2 { margin-top: .8rem; }
 
@@ -172,6 +176,9 @@ textarea {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .topbar-actions { flex-wrap: wrap; }
 }
+
+/* ─── Focus styles ─── */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';" />
   <title>BI Platform — Login</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
   <style>
@@ -15,23 +16,22 @@
     .login-error { background:rgba(239,68,68,.15); border:1px solid var(--red); color:var(--red); padding:.6rem; border-radius:var(--radius); margin-bottom:1rem; font-size:.85rem; text-align:center; }
     .login-footer { text-align:center; margin-top:1rem; font-size:.8rem; color:var(--text-muted); }
     .login-footer a { color:var(--accent); }
-    .login-hint { background:rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.3); color:var(--text-muted); padding:.6rem; border-radius:var(--radius); margin-bottom:1rem; font-size:.8rem; text-align:center; }
   </style>
 </head>
 <body>
-  <div class="login-wrapper">
+  <div class="login-wrapper" role="main">
     <div class="login-card">
       <h2>BI Platform</h2>
       {% if error %}
-      <div class="login-error">{{ error }}</div>
+      <div class="login-error" role="alert">{{ error }}</div>
       {% endif %}
-      <div class="login-hint">Default login: <strong>admin</strong> / <strong>admin123</strong></div>
-      <form method="POST" action="{{ url_for('auth.login') }}">
-        <label>Username
-          <input type="text" name="username" required autofocus autocomplete="username" />
+      <form method="POST" action="{{ url_for('auth.login') }}" aria-label="Login form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <label for="username">Username
+          <input type="text" id="username" name="username" required autofocus autocomplete="username" aria-required="true" />
         </label>
-        <label>Password
-          <input type="password" name="password" required autocomplete="current-password" />
+        <label for="password">Password
+          <input type="password" id="password" name="password" required autocomplete="current-password" aria-required="true" />
         </label>
         <button type="submit" class="btn btn-accent">Sign In</button>
       </form>

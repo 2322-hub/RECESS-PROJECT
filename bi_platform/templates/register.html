@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';" />
   <title>BI Platform — Sign Up</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
   <style>
@@ -19,24 +20,25 @@
   </style>
 </head>
 <body>
-  <div class="login-wrapper">
+  <div class="login-wrapper" role="main">
     <div class="login-card">
       <h2>Create Account</h2>
       {% if error %}
-      <div class="login-error">{{ error }}</div>
+      <div class="login-error" role="alert">{{ error }}</div>
       {% endif %}
       {% if success %}
-      <div class="login-success">{{ success }}</div>
+      <div class="login-success" role="status">{{ success }}</div>
       {% endif %}
-      <form method="POST" action="{{ url_for('auth.register_page') }}">
-        <label>Username
-          <input type="text" name="username" required autofocus minlength="3" autocomplete="username" />
+      <form method="POST" action="{{ url_for('auth.register_page') }}" aria-label="Registration form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <label for="reg-username">Username
+          <input type="text" id="reg-username" name="username" required autofocus minlength="3" autocomplete="username" aria-required="true" />
         </label>
-        <label>Password
-          <input type="password" name="password" required minlength="8" autocomplete="new-password" />
+        <label for="reg-password">Password
+          <input type="password" id="reg-password" name="password" required minlength="8" autocomplete="new-password" aria-required="true" />
         </label>
-        <label>Confirm Password
-          <input type="password" name="confirm_password" required minlength="8" autocomplete="new-password" />
+        <label for="reg-confirm">Confirm Password
+          <input type="password" id="reg-confirm" name="confirm_password" required minlength="8" autocomplete="new-password" aria-required="true" />
         </label>
         <button type="submit" class="btn btn-accent">Sign Up</button>
       </form>

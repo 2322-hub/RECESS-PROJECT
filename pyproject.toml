@@ -24,6 +24,7 @@ dependencies = [
     "flask-socketio>=5.5.1,<6.0",
     "flask-cors>=5.0.1,<6.0",
     "flask-limiter>=3.12,<4.0",
+    "flask-wtf>=1.2,<2.0",
     "pandas>=2.2.3,<3.1",
     "numpy>=1.26.4,<3.0",
     "sqlalchemy>=2.0.36,<3.0",
@@ -40,6 +41,7 @@ dev = [
     "ruff>=0.5,<1.0",
     "mypy>=1.10,<2.0",
     "pre-commit>=3.7,<4.0",
+    "pip-audit>=2.7,<3.0",
 ]
 
 [project.urls]
@@ -74,6 +76,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
 "run.py" = ["E402"]
+"alembic/**" = ["ALL"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -95,4 +98,4 @@ omit = ["tests/*", "run.py"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 60
+fail_under = 75
