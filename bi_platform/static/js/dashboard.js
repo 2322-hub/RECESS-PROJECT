@@ -361,6 +361,19 @@
   }
 
   // ─── Master render ───
+  function renderAlerts(alerts) {
+    const el = document.getElementById("alertList");
+    if (!el) return;
+    if (!alerts || !alerts.length) {
+      el.innerHTML = '<div class="alert-item info"><div class="alert-dot"></div><div><div class="alert-title">No alerts</div><div class="alert-message">Everything looks calm right now.</div></div></div>';
+      return;
+    }
+    el.innerHTML = alerts.map(a => {
+      const cls = a.type || "info";
+      return '<div class="alert-item ' + escapeHtml(cls) + '"><div class="alert-dot"></div><div><div class="alert-title">' + escapeHtml(a.title) + '</div><div class="alert-message">' + escapeHtml(a.message) + '</div></div></div>';
+    }).join("");
+  }
+
   function renderAll(d) {
     DATA = d;
     renderKpis("kpiRow", d.kpis);
@@ -369,6 +382,7 @@
     buildProductCharts(d);
     buildWebsiteCharts(d);
     buildCustomerCharts(d);
+    renderAlerts(d.alerts || []);
   }
 
   // ─── Error banner ───
@@ -500,6 +514,26 @@
 
   // ─── Refresh button ───
   $("#refreshBtn").addEventListener("click", fetchData);
+
+  function openReportExport(type) {
+    const conn = document.getElementById("activeConn").value || "demo";
+    if (type === "csv") {
+      window.location.href = "/api/v1/report/export/csv?conn=" + encodeURIComponent(conn);
+      return;
+    }
+    if (type === "excel") {
+      window.location.href = "/api/v1/report/export/excel?conn=" + encodeURIComponent(conn);
+      return;
+    }
+    const url = "/api/v1/report/preview?conn=" + encodeURIComponent(conn) + "&print=1";
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (popup) popup.focus();
+  }
+
+  $("#reportCsvBtn").addEventListener("click", () => openReportExport("csv"));
+  $("#reportExcelBtn").addEventListener("click", () => openReportExport("excel"));
+  $("#reportPdfBtn").addEventListener("click", () => openReportExport("pdf"));
+  $("#reportPrintBtn").addEventListener("click", () => openReportExport("pdf"));
 
   // ─── Filter change ───
   ["regionFilter", "categoryFilter", "segmentFilter"].forEach(id => {

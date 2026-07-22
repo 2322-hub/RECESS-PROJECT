@@ -1,6 +1,7 @@
 import json
 import re
 import time
+from io import BytesIO
 
 import pandas as pd
 from flask import Blueprint, Response, jsonify, redirect, render_template, request, session
@@ -20,6 +21,49 @@ def _json_response(data, status=200):
         status=status,
         mimetype="application/json",
     )
+
+
+def _get_dashboard_payload(conn: str) -> dict:
+    """Build the same dashboard payload used by the UI for report exports."""
+    if _use_sql_mode(conn):
+        payload = analytics.build_dashboard_payload_sql(db_connector, conn)
+        payload["_conn"] = conn
+        payload["_mode"] = "sql"
+        payload["_sales_rows"] = _row_count_cache.get(f"{conn}:sales", 0)
+        return payload
+
+    sales, customers, website = _load_dashboard_data(conn)
+    payload = analytics.build_dashboard_payload(sales, customers, website)
+    payload["_conn"] = conn
+    payload["_mode"] = "dataframe"
+    payload["_sales_rows"] = len(sales)
+    return payload
+
+
+def _build_report_dataframe(payload: dict) -> pd.DataFrame:
+    rows = []
+    kpis = payload.get("kpis", {}) or {}
+    rows.extend(
+        [
+            {"section": "Metadata", "metric": "Connection", "value": payload.get("_conn", "demo")},
+            {"section": "Metadata", "metric": "Mode", "value": payload.get("_mode", "dataframe")},
+            {"section": "Metadata", "metric": "Sales Rows", "value": payload.get("_sales_rows", 0)},
+            {"section": "KPI", "metric": "Total Revenue", "value": kpis.get("total_revenue")},
+            {"section": "KPI", "metric": "Total Profit", "value": kpis.get("total_profit")},
+            {"section": "KPI", "metric": "Profit Margin", "value": kpis.get("profit_margin")},
+            {"section": "KPI", "metric": "Total Cost", "value": kpis.get("total_cost")},
+            {"section": "KPI", "metric": "Record Count", "value": kpis.get("record_count")},
+        ]
+    )
+
+    for item in payload.get("revenue_breakdown", {}).get("region", []) or []:
+        rows.append({"section": "Revenue Breakdown", "metric": f"Region: {item.get('label', '')}", "value": item.get("value")})
+    for item in payload.get("revenue_breakdown", {}).get("product_category", []) or []:
+        rows.append({"section": "Revenue Breakdown", "metric": f"Category: {item.get('label', '')}", "value": item.get("value")})
+    for item in payload.get("revenue_breakdown", {}).get("customer_segment", []) or []:
+        rows.append({"section": "Revenue Breakdown", "metric": f"Segment: {item.get('label', '')}", "value": item.get("value")})
+
+    return pd.DataFrame(rows)
 
 
 bp = Blueprint("main", __name__)
@@ -226,30 +270,12 @@ def api_dashboard_data():
     conn = request.args.get("conn", "demo")
     _active_conn[session.get("user", "anonymous")] = conn
 
-    # SQL-only mode for large datasets — never loads full tables into memory
-    if _use_sql_mode(conn):
-        try:
-            payload = analytics.build_dashboard_payload_sql(db_connector, conn)
-            payload["_conn"] = conn
-            payload["_mode"] = "sql"
-            cache_key = f"{conn}:sales"
-            payload["_sales_rows"] = _row_count_cache.get(cache_key, 0)
-            return _json_response(payload)
-        except Exception as e:
-            logger.error("SQL dashboard error for '%s': %s", conn, e, exc_info=True)
-            return jsonify({"error": str(e), "conn": conn}), 400
-
-    # Standard DataFrame mode (demo DB or small datasets)
     try:
-        sales, customers, website = _load_dashboard_data(conn)
+        payload = _get_dashboard_payload(conn)
+        return _json_response(payload)
     except Exception as e:
         logger.error("Dashboard data error for '%s': %s", conn, e, exc_info=True)
         return jsonify({"error": str(e), "conn": conn}), 400
-    payload = analytics.build_dashboard_payload(sales, customers, website)
-    payload["_conn"] = conn
-    payload["_mode"] = "dataframe"
-    payload["_sales_rows"] = len(sales)
-    return _json_response(payload)
 
 
 @api_bp.route("/tables")
@@ -487,6 +513,61 @@ def api_export_query_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=query_result.csv"},
     )
+
+
+@api_bp.route("/report/export/csv")
+@login_required
+def api_report_export_csv():
+    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
+    try:
+        payload = _get_dashboard_payload(conn)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    csv_data = _build_report_dataframe(payload).to_csv(index=False)
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=report_export.csv"},
+    )
+
+
+@api_bp.route("/report/export/excel")
+@login_required
+def api_report_export_excel():
+    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
+    try:
+        payload = _get_dashboard_payload(conn)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        _build_report_dataframe(payload).to_excel(writer, sheet_name="Report", index=False)
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=report_export.xlsx"},
+    )
+
+
+@api_bp.route("/report/export/pdf")
+@login_required
+def api_report_export_pdf():
+    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
+    return redirect(f"/api/v1/report/preview?conn={conn}&print=1")
+
+
+@api_bp.route("/report/preview")
+@login_required
+def api_report_preview():
+    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
+    print_mode = request.args.get("print", "0") == "1"
+    try:
+        payload = _get_dashboard_payload(conn)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    report_rows = _build_report_dataframe(payload).to_dict(orient="records")
+    return render_template("report_preview.html", report_rows=report_rows, conn=conn, print_mode=print_mode)
 
 
 # ------------------------------------------------------------------

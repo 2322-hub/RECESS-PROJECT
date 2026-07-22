@@ -30,6 +30,7 @@
       <a href="#" class="nav-link" data-section="products">Products</a>
       <a href="#" class="nav-link" data-section="website">Website</a>
       <a href="#" class="nav-link" data-section="customers">Customers</a>
+      <a href="#" class="nav-link" data-section="alerts">Alerts</a>
       <a href="#" class="nav-link" data-section="data-explorer">Data Explorer</a>
       <a href="#" class="nav-link" data-section="sql-query">SQL Query</a>
     </nav>
@@ -48,6 +49,12 @@
       <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation menu">&#9776;</button>
       <h1 class="topbar-title" id="pageTitle">Overview</h1>
       <div class="topbar-actions">
+        <div class="report-actions" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-sm" id="reportCsvBtn" aria-label="Export report as CSV">Export CSV</button>
+          <button class="btn btn-sm" id="reportExcelBtn" aria-label="Export report as Excel">Export Excel</button>
+          <button class="btn btn-sm" id="reportPdfBtn" aria-label="Export report as PDF">Export PDF</button>
+          <button class="btn btn-sm" id="reportPrintBtn" aria-label="Print report">Print Report</button>
+        </div>
         <button class="btn btn-sm" id="refreshBtn" aria-label="Refresh dashboard data">&#8635; Refresh</button>
         <select id="activeConn" aria-label="Active data source" style="margin-right:.5rem;min-width:120px"><option value="demo">demo</option></select>
         <input type="hidden" id="defaultConn" value="{{ default_conn }}" />
@@ -71,6 +78,18 @@
 
     <!-- ═══ OVERVIEW ═══ -->
     <section class="section active" id="sec-overview" aria-label="Overview">
+      <div class="overview-hero">
+        <div class="overview-hero-copy">
+          <p class="eyebrow">Executive overview</p>
+          <h2>See your business pulse in one glance</h2>
+          <p>Track revenue, profitability, product performance, and customer trends with a polished snapshot designed for quick decisions.</p>
+        </div>
+        <div class="overview-hero-metrics">
+          <div class="mini-pill"><span>Live</span> Real-time updates</div>
+          <div class="mini-pill"><span>Filter</span> Drill into segments</div>
+          <div class="mini-pill"><span>Export</span> Share reports fast</div>
+        </div>
+      </div>
       <div class="kpi-row" id="kpiRow" role="region" aria-label="Key performance indicators"></div>
       <div class="grid grid-2">
         <div class="card"><canvas id="chartRevenueTrend" aria-label="Revenue trend chart"></canvas></div>
@@ -120,6 +139,17 @@
       <div class="grid grid-2">
         <div class="card"><canvas id="chartCustSegment" aria-label="Customer segment chart"></canvas></div>
         <div class="card"><canvas id="chartCustRegion" aria-label="Customer region chart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ═══ ALERTS ═══ -->
+    <section class="section" id="sec-alerts" aria-label="Alerts">
+      <div class="card alert-panel-card">
+        <div class="section-heading">
+          <h2>Notifications</h2>
+          <p>Live alerts for operational and business performance.</p>
+        </div>
+        <div class="alert-list" id="alertList"></div>
       </div>
     </section>
 

@@ -34,6 +34,7 @@ class TestRoutes:
         assert res.status_code == 200
         data = res.get_json()
         assert "kpis" in data
+        assert "alerts" in data
 
     def test_api_tables(self, authenticated_client):
         res = authenticated_client.get("/api/v1/tables")
@@ -89,6 +90,22 @@ class TestRoutes:
         data = res.get_json()
         assert "columns" in data
         assert "rows" in data
+
+    def test_api_report_export_csv(self, authenticated_client):
+        res = authenticated_client.get("/api/v1/report/export/csv")
+        assert res.status_code == 200
+        assert res.mimetype == "text/csv"
+        assert "report_export.csv" in res.headers["Content-Disposition"]
+
+    def test_api_report_export_excel(self, authenticated_client):
+        res = authenticated_client.get("/api/v1/report/export/excel")
+        assert res.status_code == 200
+        assert res.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    def test_api_report_preview(self, authenticated_client):
+        res = authenticated_client.get("/api/v1/report/preview")
+        assert res.status_code == 200
+        assert b"Report Preview" in res.data
 
     def test_invalid_table_name(self, authenticated_client):
         res = authenticated_client.get("/api/v1/table/invalid;DROP")

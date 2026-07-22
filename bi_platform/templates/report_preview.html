@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Report Preview</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+    h1 { margin-bottom: 8px; }
+    .meta { color: #475569; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+    th { background: #f8fafc; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <h1>Report Preview</h1>
+  <div class="meta">Connection: {{ conn }} | Generated from BI dashboard</div>
+  <div class="no-print" style="margin-bottom: 16px;">
+    <button onclick="window.print()">Print Report</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Section</th>
+        <th>Metric</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in report_rows %}
+      <tr>
+        <td>{{ row.section }}</td>
+        <td>{{ row.metric }}</td>
+        <td>{{ row.value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if print_mode %}
+  <script>window.onload = () => window.print();</script>
+  {% endif %}
+</body>
+</html>

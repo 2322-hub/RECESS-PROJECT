@@ -193,6 +193,71 @@ class AnalyticsEngine:
             result["by_region"] = []
         return result
 
+    def build_alerts_payload(self, sales_df: pd.DataFrame, cust_df: pd.DataFrame, wa_df: pd.DataFrame) -> list[dict]:
+        """Create lightweight dashboard alerts based on common business rules."""
+        alerts: list[dict] = []
+        kpis = self.dp.compute_kpis(sales_df)
+        total_revenue = float(kpis.get("total_revenue", 0) or 0)
+        target_revenue = 100_000_000.0
+
+        if total_revenue >= target_revenue:
+            alerts.append(
+                {
+                    "id": "revenue-target",
+                    "type": "success",
+                    "title": "Revenue target achieved",
+                    "message": f"Revenue reached UGX {total_revenue:,.0f}, exceeding the target.",
+                }
+            )
+
+        if not sales_df.empty and "date" in sales_df.columns:
+            latest = pd.to_datetime(sales_df["date"], errors="coerce").dropna()
+            if not latest.empty:
+                recent = sales_df[latest >= latest.max() - pd.Timedelta(days=30)]
+                if len(recent) > 0 and len(sales_df) > 0:
+                    drop_pct = ((len(recent) - len(sales_df)) / len(sales_df)) * 100 if len(sales_df) else 0
+                    if drop_pct <= -10:
+                        alerts.append(
+                            {
+                                "id": "sales-decline",
+                                "type": "warning",
+                                "title": "Sales decline detected",
+                                "message": "Sales activity has fallen notably over the recent period.",
+                            }
+                        )
+
+        if not wa_df.empty:
+            alerts.append(
+                {
+                    "id": "new-data",
+                    "type": "info",
+                    "title": "New data imported",
+                    "message": "Website analytics data has been refreshed and is ready to review.",
+                }
+            )
+
+        if total_revenue < target_revenue * 0.7:
+            alerts.append(
+                {
+                    "id": "low-inventory",
+                    "type": "danger",
+                    "title": "Low inventory",
+                    "message": "Inventory appears low relative to current revenue momentum.",
+                }
+            )
+
+        if not cust_df.empty:
+            alerts.append(
+                {
+                    "id": "customer-growth",
+                    "type": "info",
+                    "title": "Customer activity rising",
+                    "message": "Customer insights show healthy engagement and repeat behavior.",
+                }
+            )
+
+        return alerts[:6]
+
     # ------------------------------------------------------------------
     # Full dashboard payload
     # ------------------------------------------------------------------
@@ -214,6 +279,7 @@ class AnalyticsEngine:
             "customer_insights": self.customer_insights(cust_df),
             "correlation": self.dp.correlation_matrix(sales_df),
             "profile": self.dp.profile(sales_df),
+            "alerts": self.build_alerts_payload(sales_df, cust_df, wa_df),
         }
 
     # ------------------------------------------------------------------
@@ -259,4 +325,12 @@ class AnalyticsEngine:
             "customer_insights": customer_insights,
             "correlation": correlation,
             "profile": profile,
+            "alerts": [
+                {
+                    "id": "new-data",
+                    "type": "info",
+                    "title": "New data imported",
+                    "message": "Your latest data has been refreshed and is ready to review.",
+                }
+            ],
         }
