@@ -479,7 +479,7 @@
   }
 
   // ─── Navigation ───
-  $$(".nav-link").forEach(link => {
+  $$(".nav-link[data-section]").forEach(link => {
     link.addEventListener("click", (e) => {
       e.preventDefault();
       const sec = link.dataset.section;
