@@ -16,9 +16,7 @@ class DatabaseConnector:
         """Register a named database connection via SQLAlchemy URL."""
         connect_args = {}
         url = make_url(connection_string)
-        if url.drivername.startswith("postgresql"):
-            connect_args["connect_timeout"] = Config.QUERY_TIMEOUT
-        elif url.drivername.startswith("mysql"):
+        if url.drivername.startswith(("postgresql", "mysql")):
             connect_args["connect_timeout"] = Config.QUERY_TIMEOUT
         elif url.drivername.startswith("mssql"):
             connect_args["timeout"] = Config.QUERY_TIMEOUT
@@ -133,8 +131,15 @@ class DatabaseConnector:
         """GROUP BY aggregation in SQL."""
         engine = self._engines[conn_name]
         allowed = {
-            "region", "product_category", "product_name", "customer_segment",
-            "date", "cost", "profit", "quantity", "total_revenue",
+            "region",
+            "product_category",
+            "product_name",
+            "customer_segment",
+            "date",
+            "cost",
+            "profit",
+            "quantity",
+            "total_revenue",
         }
         if group_col not in allowed or value_col not in allowed:
             raise ValueError(f"Column not allowed: {group_col} or {value_col}")
@@ -180,8 +185,12 @@ class DatabaseConnector:
         with engine.connect() as conn:
             rows = conn.execute(sql).fetchall()
         return [
-            {"date": str(r[0]), "revenue": round(float(r[1]), 2),
-             "profit": round(float(r[2]), 2), "quantity": int(r[3])}
+            {
+                "date": str(r[0]),
+                "revenue": round(float(r[1]), 2),
+                "profit": round(float(r[2]), 2),
+                "quantity": int(r[3]),
+            }
             for r in rows
         ]
 
@@ -277,8 +286,7 @@ class DatabaseConnector:
             "total_revenue": round(float(row[5]), 2),
             "conversion_rate": round(float(row[6]), 2),
             "daily_trend": [
-                {"date": str(r[0]), "page_views": int(r[1]),
-                 "visitors": int(r[2]), "revenue": round(float(r[3]), 2)}
+                {"date": str(r[0]), "page_views": int(r[1]), "visitors": int(r[2]), "revenue": round(float(r[3]), 2)}
                 for r in trend_rows
             ],
         }
@@ -312,8 +320,12 @@ class DatabaseConnector:
         with engine.connect() as conn:
             seg_rows = conn.execute(seg_sql).fetchall()
         result["by_segment"] = [
-            {"segment": str(r[0]), "count": int(r[1]),
-             "avg_ltv": round(float(r[2]), 2), "total_ltv": round(float(r[3]), 2)}
+            {
+                "segment": str(r[0]),
+                "count": int(r[1]),
+                "avg_ltv": round(float(r[2]), 2),
+                "total_ltv": round(float(r[3]), 2),
+            }
             for r in seg_rows
         ]
         reg_sql = text(f"""
@@ -325,9 +337,7 @@ class DatabaseConnector:
         with engine.connect() as conn:
             reg_rows = conn.execute(reg_sql).fetchall()
         result["by_region"] = [
-            {"region": str(r[0]), "count": int(r[1]),
-             "avg_ltv": round(float(r[2]), 2)}
-            for r in reg_rows
+            {"region": str(r[0]), "count": int(r[1]), "avg_ltv": round(float(r[2]), 2)} for r in reg_rows
         ]
         return result
 

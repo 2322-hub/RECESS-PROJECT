@@ -24,9 +24,18 @@ N_WEB_DAYS = 1_000
 regions = ["North", "South", "East", "West", "Central", "Pacific", "Mountain"]
 categories = ["Electronics", "Clothing", "Food", "Furniture", "Software", "Hardware"]
 products = [
-    "Widget A", "Widget B", "Gadget X", "Gadget Y", "Service Pro",
-    "Basic Plan", "Enterprise Suite", "Cloud Storage", "Analytics Tool",
-    "Security Shield", "Dev Toolkit", "Mobile App",
+    "Widget A",
+    "Widget B",
+    "Gadget X",
+    "Gadget Y",
+    "Service Pro",
+    "Basic Plan",
+    "Enterprise Suite",
+    "Cloud Storage",
+    "Analytics Tool",
+    "Security Shield",
+    "Dev Toolkit",
+    "Mobile App",
 ]
 segments = ["Enterprise", "SMB", "Consumer", "Government", "Education"]
 
@@ -39,7 +48,8 @@ with engine.begin() as conn:
 
 print("Creating tables...")
 with engine.begin() as conn:
-    conn.execute(text("""
+    conn.execute(
+        text("""
         CREATE TABLE sales (
             id SERIAL PRIMARY KEY,
             date TEXT,
@@ -53,8 +63,10 @@ with engine.begin() as conn:
             profit REAL,
             customer_segment TEXT
         )
-    """))
-    conn.execute(text("""
+    """)
+    )
+    conn.execute(
+        text("""
         CREATE TABLE customers (
             id SERIAL PRIMARY KEY,
             name TEXT,
@@ -65,8 +77,10 @@ with engine.begin() as conn:
             orders_count INTEGER,
             segment TEXT
         )
-    """))
-    conn.execute(text("""
+    """)
+    )
+    conn.execute(
+        text("""
         CREATE TABLE website_analytics (
             id SERIAL PRIMARY KEY,
             date TEXT,
@@ -77,7 +91,8 @@ with engine.begin() as conn:
             conversions INTEGER,
             revenue REAL
         )
-    """))
+    """)
+    )
 
 # --- Seed sales in chunks ---
 print(f"Seeding {N_SALES:,} sales rows...")
@@ -96,18 +111,20 @@ for offset in range(0, N_SALES, chunk_size):
         price = round(float(rng.uniform(10, 50000)), 2)
         total = round(qty * price, 2)
         cost = round(total * rng.uniform(0.3, 0.85), 2)
-        rows.append({
-            "date": d,
-            "region": rng.choice(regions),
-            "product_category": cat,
-            "product_name": prod,
-            "quantity": qty,
-            "unit_price": price,
-            "total_revenue": total,
-            "cost": cost,
-            "profit": round(total - cost, 2),
-            "customer_segment": rng.choice(segments),
-        })
+        rows.append(
+            {
+                "date": d,
+                "region": rng.choice(regions),
+                "product_category": cat,
+                "product_name": prod,
+                "quantity": qty,
+                "unit_price": price,
+                "total_revenue": total,
+                "cost": cost,
+                "profit": round(total - cost, 2),
+                "customer_segment": rng.choice(segments),
+            }
+        )
     pd.DataFrame(rows).to_sql("sales", engine, if_exists="append", index=False)
     elapsed = time.time() - start
     rate = (offset + n) / elapsed if elapsed > 0 else 0
@@ -123,15 +140,17 @@ for offset in range(0, N_CUSTOMERS, chunk_size):
     rows = []
     for i in range(offset + 1, offset + n + 1):
         sd = str(dates[rng.integers(0, len(dates))].date())
-        rows.append({
-            "name": f"Customer_{i}",
-            "email": f"customer{i}@example.com",
-            "region": rng.choice(regions),
-            "signup_date": sd,
-            "lifetime_value": round(float(rng.uniform(100, 5000000)), 2),
-            "orders_count": int(rng.integers(1, 500)),
-            "segment": rng.choice(segments),
-        })
+        rows.append(
+            {
+                "name": f"Customer_{i}",
+                "email": f"customer{i}@example.com",
+                "region": rng.choice(regions),
+                "signup_date": sd,
+                "lifetime_value": round(float(rng.uniform(100, 5000000)), 2),
+                "orders_count": int(rng.integers(1, 500)),
+                "segment": rng.choice(segments),
+            }
+        )
     pd.DataFrame(rows).to_sql("customers", engine, if_exists="append", index=False)
     print(f"  {offset + n:>10,} / {N_CUSTOMERS:,} customers")
 
@@ -148,15 +167,17 @@ for offset in range(0, N_WEB_DAYS, chunk_size):
         pv = int(rng.integers(1000, 100000))
         uv = int(pv * rng.uniform(0.4, 0.85))
         conv = int(rng.integers(0, min(uv, 500)))
-        rows.append({
-            "date": str(wa_dates[i].date()),
-            "page_views": pv,
-            "unique_visitors": uv,
-            "bounce_rate": round(float(rng.uniform(0.15, 0.75)), 4),
-            "avg_session_duration": round(float(rng.uniform(20, 600)), 2),
-            "conversions": conv,
-            "revenue": round(float(rng.uniform(0, 50000000)), 2),
-        })
+        rows.append(
+            {
+                "date": str(wa_dates[i].date()),
+                "page_views": pv,
+                "unique_visitors": uv,
+                "bounce_rate": round(float(rng.uniform(0.15, 0.75)), 4),
+                "avg_session_duration": round(float(rng.uniform(20, 600)), 2),
+                "conversions": conv,
+                "revenue": round(float(rng.uniform(0, 50000000)), 2),
+            }
+        )
     pd.DataFrame(rows).to_sql("website_analytics", engine, if_exists="append", index=False)
     print(f"  {offset + n:>6} / {N_WEB_DAYS} days")
 

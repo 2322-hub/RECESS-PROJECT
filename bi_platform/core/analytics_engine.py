@@ -239,13 +239,14 @@ class AnalyticsEngine:
         try:
             sample = db_connector.execute_query(
                 conn,
-                "SELECT total_revenue, cost, profit, quantity, unit_price FROM sales TABLESAMPLE BERNOULLI(1) LIMIT 5000",
+                "SELECT total_revenue, cost, profit, quantity, unit_price "
+                "FROM sales TABLESAMPLE BERNOULLI(1) LIMIT 5000",
             )
             if not sample.empty:
                 correlation = db_connector.sql_correlation_matrix(sample)
                 profile = self.dp.profile(sample)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001, S110
+            pass  # profiling is best-effort
 
         return {
             "kpis": kpis,
