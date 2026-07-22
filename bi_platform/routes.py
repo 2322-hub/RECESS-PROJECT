@@ -344,8 +344,6 @@ def api_table_data(table_name: str):
 @login_required
 @limiter.limit("5/minute")
 def api_connect_db():
-    if session.get("role") != "admin":
-        return jsonify({"error": "Admin access required"}), 403
     data = request.get_json(force=True)
     name = data.get("name", "")
     conn_str = data.get("connection_string", "")
