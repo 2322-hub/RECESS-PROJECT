@@ -2,7 +2,7 @@ class TestAuth:
     def test_register_page(self, client):
         res = client.get("/register")
         assert res.status_code == 200
-        assert b"Create Account" in res.data or b"Register" in res.data
+        assert b"Create your account" in res.data or b"Sign Up" in res.data
 
     def test_register_via_form_success(self, client):
         res = client.post(
