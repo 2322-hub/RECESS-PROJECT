@@ -9,7 +9,6 @@ data:
   RATELIMIT_DEFAULT: "60/minute"
   RATELIMIT_STORAGE_URI: "redis://redis:6379/0"
   REDIS_URL: "redis://redis:6379/0"
-  DATABASE_URL: "postgresql+psycopg2://biplatform:changeme@postgres:5432/biplatform"
   LOG_FORMAT: "json"
   LOG_LEVEL: "INFO"
   DB_POOL_SIZE: "5"

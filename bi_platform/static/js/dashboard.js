@@ -85,6 +85,59 @@
     ).join("");
   }
 
+  // ─── Drill-down state ───
+  let activeDrillDown = null; // { filterId, value }
+
+  function drillDown(filterId, value) {
+    if (!value) return;
+    const sel = document.getElementById(filterId);
+    if (!sel) return;
+    const opts = Array.from(sel.options).map(o => o.value);
+    if (!opts.includes(value)) {
+      const opt = document.createElement("option");
+      opt.value = value; opt.textContent = value;
+      sel.appendChild(opt);
+    }
+    if (activeDrillDown && activeDrillDown.filterId === filterId && activeDrillDown.value === value) {
+      clearDrillDown();
+      return;
+    }
+    sel.value = value;
+    activeDrillDown = { filterId, value };
+    const tag = document.getElementById("drilldownTag");
+    const bar = document.getElementById("drilldownBar");
+    const colName = filterId.replace("Filter", "").replace("_", " ");
+    tag.textContent = colName + " = " + value;
+    bar.classList.add("active");
+    applyFilters();
+  }
+
+  function clearDrillDown() {
+    if (!activeDrillDown) return;
+    const sel = document.getElementById(activeDrillDown.filterId);
+    if (sel) sel.value = "";
+    activeDrillDown = null;
+    document.getElementById("drilldownBar").classList.remove("active");
+    applyFilters();
+  }
+  document.getElementById("drilldownClear").addEventListener("click", clearDrillDown);
+
+  function drillDownClickHandler(filterId) {
+    return function(_event, elements) {
+      if (!elements || !elements.length) return;
+      const idx = elements[0].index;
+      const chart = charts[this.canvas.id];
+      if (chart) {
+        const label = chart.data.labels[idx];
+        drillDown(filterId, label);
+      }
+    };
+  }
+
+  function drillDownHoverHandler(_event, elements) {
+    this.canvas.style.cursor = elements && elements.length ? "pointer" : "default";
+  }
+
   // ─── Chart builders ───
   function buildOverviewCharts(d) {
     const monthly = d.monthly_trends || [];
@@ -107,7 +160,12 @@
         labels: regionData.map(r => r.label),
         datasets: [{ label: "Revenue", data: regionData.map(r => r.value), backgroundColor: COLORS }],
       },
-      options: { responsive: true, plugins: { title: { display: true, text: "Revenue by Region" } } },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: "Revenue by Region (click to drill down)" } },
+        onClick: drillDownClickHandler("regionFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
 
     const catData = d.revenue_breakdown?.product_category || [];
@@ -117,7 +175,12 @@
         labels: catData.map(c => c.label),
         datasets: [{ data: catData.map(c => c.value), backgroundColor: COLORS }],
       },
-      options: { responsive: true, plugins: { title: { display: true, text: "Revenue by Category" } } },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: "Revenue by Category (click to drill down)" } },
+        onClick: drillDownClickHandler("categoryFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
 
     const segData = d.revenue_breakdown?.customer_segment || [];
@@ -127,7 +190,12 @@
         labels: segData.map(s => s.label),
         datasets: [{ data: segData.map(s => s.value), backgroundColor: COLORS }],
       },
-      options: { responsive: true, plugins: { title: { display: true, text: "Revenue by Segment" } } },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: "Revenue by Segment (click to drill down)" } },
+        onClick: drillDownClickHandler("segmentFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
 
     const regComp = d.regional_comparison || [];
@@ -177,7 +245,12 @@
           { label: "Profit", data: rc.map(r => r.profit), backgroundColor: COLORS[1] },
         ],
       },
-      options: { responsive: true, plugins: { title: { display: true, text: "Regional Comparison" } } },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: "Regional Comparison (click to drill down)" } },
+        onClick: drillDownClickHandler("regionFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
   }
 
@@ -189,7 +262,12 @@
         labels: topP.map(p => p.label),
         datasets: [{ label: "Revenue", data: topP.map(p => p.value), backgroundColor: COLORS }],
       },
-      options: { indexAxis: "y", responsive: true, plugins: { title: { display: true, text: "Top Products by Revenue" } } },
+      options: {
+        indexAxis: "y", responsive: true,
+        plugins: { title: { display: true, text: "Top Products by Revenue (click to drill down)" } },
+        onClick: drillDownClickHandler("categoryFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
 
     const catData = d.revenue_breakdown?.product_category || [];
@@ -199,7 +277,12 @@
         labels: catData.map(c => c.label),
         datasets: [{ data: catData.map(c => c.value), backgroundColor: COLORS.map(c => c + "99") }],
       },
-      options: { responsive: true, plugins: { title: { display: true, text: "Category Revenue (Polar)" } } },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: "Category Revenue (click to drill down)" } },
+        onClick: drillDownClickHandler("categoryFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
 
     const pp = d.product_performance || [];
@@ -252,7 +335,12 @@
           { label: "Avg LTV", data: bySeg.map(s => s.avg_ltv), backgroundColor: COLORS[1], hidden: true },
         ],
       },
-      options: { responsive: true, plugins: { title: { display: true, text: "Customers by Segment" } } },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: "Customers by Segment (click to drill down)" } },
+        onClick: drillDownClickHandler("segmentFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
 
     const byReg = ci.by_region || [];
@@ -262,8 +350,14 @@
         labels: byReg.map(r => r.region),
         datasets: [{ data: byReg.map(r => r.count), backgroundColor: COLORS }],
       },
-      options: { responsive: true, plugins: { title: { display: true, text: "Customers by Region" } } },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: "Customers by Region (click to drill down)" } },
+        onClick: drillDownClickHandler("regionFilter"),
+        onHover: drillDownHoverHandler,
+      },
     });
+
   }
 
   // ─── Master render ───
@@ -297,22 +391,37 @@
   }
 
   // ─── Data Fetching ───
+  let _lastConn = null;
+  function showSpinner() { document.getElementById("spinnerOverlay").classList.add("active"); }
+  function hideSpinner() { document.getElementById("spinnerOverlay").classList.remove("active"); }
+
   async function fetchData() {
     const conn = (document.getElementById("activeConn") || {}).value || "demo";
+    if (_lastConn && _lastConn !== conn) {
+      clearDrillDown();
+      ["regionFilter", "categoryFilter", "segmentFilter"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+    }
+    _lastConn = conn;
+    showSpinner();
     try {
       const res = await fetch("/api/v1/dashboard-data?conn=" + encodeURIComponent(conn));
       if (res.status === 401 || res.redirected) { window.location.href = "/login"; return; }
       const text = await res.text();
       let d;
       try { d = JSON.parse(text); } catch (_) { showError("Server error (HTTP " + res.status + "). Check server logs."); console.error("Non-JSON response:", text.slice(0, 500)); return; }
-      if (d.error) { showError("Data load error: " + d.error + " (conn: " + (d.conn || conn) + ")"); console.error("API error:", d); return; }
+      if (d.error) { hideSpinner(); showError("Data load error: " + d.error + " (conn: " + (d.conn || conn) + ")"); console.error("API error:", d); return; }
       hideError();
       renderAll(d);
       populateFilters(d);
+      hideSpinner();
       if (d._conn && d._conn !== "demo") {
         console.log("Dashboard loaded from '" + d._conn + "': " + d._sales_rows + " sales rows");
       }
     } catch (e) {
+      hideSpinner();
       showError("Failed to load dashboard data: " + e.message);
       console.error("Failed to load dashboard data", e);
     }
@@ -358,6 +467,8 @@
         product_category: document.getElementById("categoryFilter").value,
         customer_segment: document.getElementById("segmentFilter").value,
       },
+      date_start: document.getElementById("dateStart").value || null,
+      date_end: document.getElementById("dateEnd").value || null,
     };
     try {
       const res = await fetch("/api/v1/filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -392,6 +503,17 @@
 
   // ─── Filter change ───
   ["regionFilter", "categoryFilter", "segmentFilter"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", () => {
+      if (activeDrillDown && activeDrillDown.filterId !== id) {
+        clearDrillDown();
+      } else if (activeDrillDown && activeDrillDown.filterId === id && !el.value) {
+        clearDrillDown();
+      }
+      applyFilters();
+    });
+  });
+  ["dateStart", "dateEnd"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", applyFilters);
   });
@@ -451,6 +573,12 @@
   }
   $("#explorerConn").addEventListener("change", loadExplorerTables);
   $("#explorerLoad").addEventListener("click", loadExplorer);
+  $("#explorerExport").addEventListener("click", () => {
+    const conn = document.getElementById("explorerConn").value;
+    const table = document.getElementById("explorerTable").value;
+    if (!table) return;
+    window.location.href = "/api/v1/export/" + encodeURIComponent(table) + "?conn=" + encodeURIComponent(conn);
+  });
 
   function renderTable(containerId, columns, rows) {
     const el = document.getElementById(containerId);
@@ -510,6 +638,24 @@
     } catch (e) { el.innerHTML = "<p style='color:var(--red)'>Error: " + escapeHtml(e.message) + "</p>"; }
   });
   $("#sqlClearBtn").addEventListener("click", () => { document.getElementById("sqlResult").innerHTML = ""; });
+  $("#sqlExportBtn").addEventListener("click", async () => {
+    const conn = document.getElementById("sqlConnection").value;
+    const sql = document.getElementById("sqlEditor").value.trim();
+    if (!sql) return;
+    try {
+      const res = await fetch("/api/v1/export-query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connection: conn, sql }),
+      });
+      if (!res.ok) { const d = await res.json(); showError(d.error || "Export failed"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "query_result.csv"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { showError("Export failed: " + e.message); }
+  });
 
   // ─── Populate connection dropdown and load tables ───
   async function initExplorer() {

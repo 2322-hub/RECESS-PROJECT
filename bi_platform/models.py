@@ -33,7 +33,12 @@ def get_engine(db_url: str | None = None):
     )
 
 
-Engine = get_engine()
+def _make_engine():
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    return get_engine()
+
+Engine = _make_engine()
 SessionLocal = sessionmaker(bind=Engine)
 
 

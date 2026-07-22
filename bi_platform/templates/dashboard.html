@@ -13,6 +13,14 @@
 <body>
   <a href="#main-content" class="sr-only" style="position:absolute;top:-40px;left:0;background:var(--accent);color:#fff;padding:8px;z-index:100;">Skip to content</a>
 
+  <!-- Loading spinner -->
+  <div class="spinner-overlay" id="spinnerOverlay" role="status" aria-label="Loading data">
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <div class="spinner-text">Loading dashboard data...</div>
+    </div>
+  </div>
+
   <!-- ─── SIDEBAR ─── -->
   <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
     <div class="sidebar-brand">BI Platform</div>
@@ -48,9 +56,18 @@
           <select id="regionFilter" aria-label="Filter by region"><option value="">All Regions</option></select>
           <select id="categoryFilter" aria-label="Filter by category"><option value="">All Categories</option></select>
           <select id="segmentFilter" aria-label="Filter by segment"><option value="">All Segments</option></select>
+          <input type="date" id="dateStart" aria-label="Start date" style="padding:.35rem .6rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.8rem" />
+          <input type="date" id="dateEnd" aria-label="End date" style="padding:.35rem .6rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.8rem" />
         </div>
       </div>
     </header>
+
+    <!-- Drill-down filter indicator -->
+    <div class="drilldown-bar" id="drilldownBar" role="status" aria-live="polite">
+      <span>Filtered by:</span>
+      <span class="drilldown-tag" id="drilldownTag"></span>
+      <button class="drilldown-clear" id="drilldownClear" aria-label="Clear drill-down filter">Clear</button>
+    </div>
 
     <!-- ═══ OVERVIEW ═══ -->
     <section class="section active" id="sec-overview" aria-label="Overview">
@@ -115,6 +132,7 @@
         <select id="explorerTable" aria-label="Select table"></select>
         <input type="text" id="explorerSearch" placeholder="Search..." aria-label="Search table data" />
         <button class="btn btn-sm btn-accent" id="explorerLoad" aria-label="Load table data">Load</button>
+        <button class="btn btn-sm" id="explorerExport" aria-label="Export table data as CSV">Export CSV</button>
       </div>
       <div class="card">
         <div class="table-wrap" id="explorerTableWrap" role="region" aria-label="Explorer data table"></div>
@@ -131,6 +149,7 @@
         <div style="display:flex;gap:.5rem">
           <button class="btn btn-accent" id="sqlRunBtn" aria-label="Run SQL query">Run</button>
           <button class="btn" id="sqlClearBtn" aria-label="Clear result">Clear</button>
+          <button class="btn" id="sqlExportBtn" aria-label="Export query result as CSV">Export CSV</button>
         </div>
         <div id="sqlResult" style="margin-top:.5rem;overflow:auto;max-height:400px"></div>
       </div>

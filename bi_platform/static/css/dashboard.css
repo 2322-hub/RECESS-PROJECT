@@ -180,6 +180,40 @@ textarea {
 /* ─── Focus styles ─── */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* ─── Loading spinner ─── */
+.spinner-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,.7);
+  display: none; align-items: center; justify-content: center; z-index: 9000;
+}
+.spinner-overlay.active { display: flex; }
+.spinner {
+  width: 48px; height: 48px; border: 4px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner-text { color: var(--text); margin-top: 1rem; font-size: .9rem; }
+.spinner-wrap { text-align: center; }
+
+/* ─── Drill-down indicator ─── */
+.drilldown-bar {
+  display: none; align-items: center; gap: .6rem; padding: .5rem 1rem;
+  margin-bottom: 1rem; border-radius: var(--radius);
+  background: rgba(59,130,246,.12); border: 1px solid var(--accent);
+  font-size: .85rem; color: var(--accent);
+}
+.drilldown-bar.active { display: flex; }
+.drilldown-bar .drilldown-tag {
+  background: var(--accent); color: #fff; padding: .15rem .5rem;
+  border-radius: 4px; font-weight: 600; font-size: .8rem;
+}
+.drilldown-clear {
+  margin-left: auto; background: none; border: 1px solid var(--accent);
+  color: var(--accent); padding: .2rem .6rem; border-radius: 4px;
+  cursor: pointer; font-size: .8rem;
+}
+.drilldown-clear:hover { background: var(--accent); color: #fff; }
+
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }

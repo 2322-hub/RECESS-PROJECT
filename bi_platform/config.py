@@ -40,9 +40,9 @@ class Config:
     }
 
     # Data processing limits
-    MAX_ROWS_IN_MEMORY = 500_000
-    CHUNK_SIZE = 50_000
-    QUERY_TIMEOUT = 30
+    MAX_ROWS_IN_MEMORY = int(os.environ.get("MAX_ROWS_IN_MEMORY", "5_000_000"))
+    CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "100_000"))
+    QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", "60"))
 
     # WebSocket settings
     SOCKETIO_ASYNC_MODE = "threading"

@@ -38,6 +38,14 @@ class DatabaseConnector:
     def list_connections(self) -> list[str]:
         return list(self._engines.keys())
 
+    def disconnect(self, name: str) -> bool:
+        """Remove a named connection and dispose its engine. Returns True if found."""
+        engine = self._engines.pop(name, None)
+        if engine is None:
+            return False
+        engine.dispose()
+        return True
+
     def list_tables(self, conn_name: str) -> list[str]:
         engine = self._engines.get(conn_name)
         if engine is None:
@@ -64,7 +72,7 @@ class DatabaseConnector:
         if engine is None:
             raise ValueError(f"No connection named '{conn_name}'")
         with engine.connect() as conn:
-            result = conn.execute(text(sql), params or {})
+            result = conn.execution_options(timeout=Config.QUERY_TIMEOUT).execute(text(sql), params or {})
             df = pd.DataFrame(result.fetchall(), columns=result.keys())
         return df
 
@@ -78,6 +86,266 @@ class DatabaseConnector:
                 if not chunk:
                     break
                 yield pd.DataFrame(chunk, columns=result.keys())
+
+    # ------------------------------------------------------------------
+    # SQL-side aggregation helpers (for large datasets)
+    # ------------------------------------------------------------------
+    def sql_kpis(self, conn_name: str, table: str = "sales") -> dict:
+        """Compute KPIs entirely in SQL — never loads full table into memory."""
+        engine = self._engines.get(conn_name)
+        if engine is None:
+            raise ValueError(f"No connection named '{conn_name}'")
+        sql = text(f"""
+            SELECT
+                COUNT(*)                           AS record_count,
+                COALESCE(SUM(total_revenue), 0)    AS total_revenue,
+                COALESCE(AVG(total_revenue), 0)    AS avg_revenue,
+                COALESCE(SUM(cost), 0)             AS total_cost,
+                COALESCE(SUM(profit), 0)           AS total_profit,
+                CASE WHEN SUM(total_revenue) > 0
+                     THEN ROUND(CAST(SUM(profit) / SUM(total_revenue) * 100 AS NUMERIC), 2)
+                     ELSE 0 END                    AS profit_margin
+            FROM {table}
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            row = conn.execute(sql).fetchone()
+        return {
+            "record_count": int(row[0]),
+            "total_revenue": round(float(row[1]), 2),
+            "avg_revenue": round(float(row[2]), 2),
+            "total_cost": round(float(row[3]), 2),
+            "total_profit": round(float(row[4]), 2),
+            "profit_margin": round(float(row[5]), 2),
+        }
+
+    def sql_group_by_sum(self, conn_name: str, group_col: str, value_col: str, table: str = "sales") -> list[dict]:
+        """GROUP BY aggregation in SQL."""
+        engine = self._engines[conn_name]
+        allowed = {
+            "region", "product_category", "product_name", "customer_segment",
+            "date", "cost", "profit", "quantity", "total_revenue",
+        }
+        if group_col not in allowed or value_col not in allowed:
+            raise ValueError(f"Column not allowed: {group_col} or {value_col}")
+        sql = text(f"""
+            SELECT {group_col} AS label, SUM({value_col}) AS value
+            FROM {table}
+            GROUP BY {group_col}
+            ORDER BY value DESC
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            rows = conn.execute(sql).fetchall()
+        return [{"label": str(r[0]), "value": round(float(r[1]), 2)} for r in rows]
+
+    def sql_top_n(
+        self, conn_name: str, group_col: str, value_col: str, n: int = 10, table: str = "sales"
+    ) -> list[dict]:
+        """Top-N by value using SQL."""
+        engine = self._engines[conn_name]
+        sql = text(f"""
+            SELECT {group_col} AS label, SUM({value_col}) AS value
+            FROM {table}
+            GROUP BY {group_col}
+            ORDER BY value DESC
+            LIMIT :n
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            rows = conn.execute(sql, {"n": n}).fetchall()
+        return [{"label": str(r[0]), "value": round(float(r[1]), 2)} for r in rows]
+
+    def sql_monthly_trends(self, conn_name: str, table: str = "sales") -> list[dict]:
+        """Monthly revenue/profit trends computed in SQL."""
+        engine = self._engines[conn_name]
+        sql = text(f"""
+            SELECT
+                SUBSTR(date, 1, 7)                 AS date,
+                SUM(total_revenue)                  AS revenue,
+                COALESCE(SUM(profit), 0)            AS profit,
+                COALESCE(SUM(quantity), 0)          AS quantity
+            FROM {table}
+            GROUP BY SUBSTR(date, 1, 7)
+            ORDER BY date
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            rows = conn.execute(sql).fetchall()
+        return [
+            {"date": str(r[0]), "revenue": round(float(r[1]), 2),
+             "profit": round(float(r[2]), 2), "quantity": int(r[3])}
+            for r in rows
+        ]
+
+    def sql_regional_comparison(self, conn_name: str, table: str = "sales") -> list[dict]:
+        """Regional comparison in SQL."""
+        engine = self._engines[conn_name]
+        sql = text(f"""
+            SELECT
+                region,
+                SUM(profit)                        AS profit,
+                COUNT(*)                           AS orders,
+                SUM(total_revenue)                 AS revenue,
+                AVG(total_revenue)                 AS avg_order_value
+            FROM {table}
+            GROUP BY region
+            ORDER BY revenue DESC
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            rows = conn.execute(sql).fetchall()
+        return [
+            {
+                "region": str(r[0]),
+                "profit": round(float(r[1]), 2),
+                "orders": int(r[2]),
+                "revenue": round(float(r[3]), 2),
+                "avg_order_value": round(float(r[4]), 2),
+            }
+            for r in rows
+        ]
+
+    def sql_product_performance(self, conn_name: str, table: str = "sales") -> list[dict]:
+        """Product performance in SQL."""
+        engine = self._engines[conn_name]
+        sql = text(f"""
+            SELECT
+                product_category,
+                product_name,
+                SUM(total_revenue)                 AS total_revenue,
+                COALESCE(SUM(profit), 0)           AS profit,
+                COALESCE(SUM(quantity), 0)         AS quantity
+            FROM {table}
+            GROUP BY product_category, product_name
+            ORDER BY total_revenue DESC
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            rows = conn.execute(sql).fetchall()
+        return [
+            {
+                "product_category": str(r[0]),
+                "product_name": str(r[1]),
+                "total_revenue": round(float(r[2]), 2),
+                "profit": round(float(r[3]), 2),
+                "quantity": int(r[4]),
+            }
+            for r in rows
+        ]
+
+    def sql_website_summary(self, conn_name: str, table: str = "website_analytics") -> dict:
+        """Website analytics summary in SQL."""
+        engine = self._engines[conn_name]
+        sql = text(f"""
+            SELECT
+                COALESCE(SUM(page_views), 0)              AS total_page_views,
+                COALESCE(SUM(unique_visitors), 0)         AS total_unique_visitors,
+                COALESCE(AVG(bounce_rate), 0)              AS avg_bounce_rate,
+                COALESCE(AVG(avg_session_duration), 0)     AS avg_session_duration,
+                COALESCE(SUM(conversions), 0)              AS total_conversions,
+                COALESCE(SUM(revenue), 0)                  AS total_revenue,
+                CASE WHEN SUM(unique_visitors) > 0
+                     THEN ROUND(CAST(SUM(conversions) AS NUMERIC) / SUM(unique_visitors) * 100, 2)
+                     ELSE 0 END                            AS conversion_rate
+            FROM {table}
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            row = conn.execute(sql).fetchone()
+        trend_sql = text(f"""
+            SELECT date,
+                   SUM(page_views)    AS page_views,
+                   SUM(unique_visitors) AS visitors,
+                   SUM(revenue)       AS revenue
+            FROM {table}
+            GROUP BY date
+            ORDER BY date
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            trend_rows = conn.execute(trend_sql).fetchall()
+        return {
+            "total_page_views": int(row[0]),
+            "total_unique_visitors": int(row[1]),
+            "avg_bounce_rate": round(float(row[2]) * 100, 2),
+            "avg_session_duration": round(float(row[3]), 2),
+            "total_conversions": int(row[4]),
+            "total_revenue": round(float(row[5]), 2),
+            "conversion_rate": round(float(row[6]), 2),
+            "daily_trend": [
+                {"date": str(r[0]), "page_views": int(r[1]),
+                 "visitors": int(r[2]), "revenue": round(float(r[3]), 2)}
+                for r in trend_rows
+            ],
+        }
+
+    def sql_customer_insights(self, conn_name: str, table: str = "customers") -> dict:
+        """Customer insights in SQL."""
+        engine = self._engines[conn_name]
+        sql = text(f"""
+            SELECT
+                COUNT(*)                           AS total_customers,
+                COALESCE(AVG(lifetime_value), 0)   AS avg_lifetime_value,
+                COALESCE(SUM(lifetime_value), 0)   AS total_lifetime_value,
+                COALESCE(AVG(orders_count), 0)     AS avg_orders
+            FROM {table}
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            row = conn.execute(sql).fetchone()
+        result = {
+            "total_customers": int(row[0]),
+            "avg_lifetime_value": round(float(row[1]), 2),
+            "total_lifetime_value": round(float(row[2]), 2),
+            "avg_orders": round(float(row[3]), 2),
+        }
+        seg_sql = text(f"""
+            SELECT segment, COUNT(*) AS count,
+                   AVG(lifetime_value) AS avg_ltv,
+                   SUM(lifetime_value) AS total_ltv
+            FROM {table}
+            GROUP BY segment
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            seg_rows = conn.execute(seg_sql).fetchall()
+        result["by_segment"] = [
+            {"segment": str(r[0]), "count": int(r[1]),
+             "avg_ltv": round(float(r[2]), 2), "total_ltv": round(float(r[3]), 2)}
+            for r in seg_rows
+        ]
+        reg_sql = text(f"""
+            SELECT region, COUNT(*) AS count,
+                   AVG(lifetime_value) AS avg_ltv
+            FROM {table}
+            GROUP BY region
+        """)  # noqa: S608
+        with engine.connect() as conn:
+            reg_rows = conn.execute(reg_sql).fetchall()
+        result["by_region"] = [
+            {"region": str(r[0]), "count": int(r[1]),
+             "avg_ltv": round(float(r[2]), 2)}
+            for r in reg_rows
+        ]
+        return result
+
+    def sql_revenue_breakdown(self, conn_name: str, table: str = "sales") -> dict:
+        """Revenue breakdown by region/category/segment in SQL."""
+        engine = self._engines[conn_name]
+        result = {}
+        for group in ("region", "product_category", "customer_segment"):
+            sql = text(f"""
+                SELECT {group} AS label, SUM(total_revenue) AS value
+                FROM {table}
+                GROUP BY {group}
+                ORDER BY value DESC
+            """)  # noqa: S608
+            with engine.connect() as conn:
+                rows = conn.execute(sql).fetchall()
+            result[group] = [{"label": str(r[0]), "value": round(float(r[1]), 2)} for r in rows]
+        return result
+
+    def sql_correlation_matrix(self, df: "pd.DataFrame") -> dict:
+        """Compute correlation matrix from a sample DataFrame."""
+        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+        if len(numeric_cols) < 2:
+            return {}
+        corr = df[numeric_cols].corr().round(4)
+        return {
+            "columns": numeric_cols,
+            "matrix": corr.values.tolist(),
+        }
 
     # ------------------------------------------------------------------
     # Demo data seeding

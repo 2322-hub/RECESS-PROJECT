@@ -25,8 +25,8 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    if not app.debug and app.config["SECRET_KEY"] == "change-me":
-        raise RuntimeError("SECRET_KEY must be a secure value in production.")
+    if app.config["SECRET_KEY"] == "change-me":
+        raise RuntimeError("SECRET_KEY must be changed from the default value.")
 
     # Sentry
     if app.config["SENTRY_DSN"]:
@@ -51,7 +51,16 @@ def create_app(config_class=Config):
     metrics.init_app(app)
 
     # Exempt API endpoints that accept JSON (CSRF handled by session auth)
-    from .routes import api_connect_db, api_custom_query, api_custom_query2, api_dashboard_data, api_filter, api_list_connections, handle_connect, handle_refresh
+    from .routes import (
+        api_connect_db,
+        api_custom_query,
+        api_custom_query2,
+        api_dashboard_data,
+        api_filter,
+        api_list_connections,
+        handle_connect,
+        handle_refresh,
+    )
 
     csrf.exempt(api_dashboard_data)
     csrf.exempt(api_custom_query)
@@ -88,9 +97,11 @@ def create_app(config_class=Config):
             from .models import SessionLocal
 
             s = SessionLocal()
-            s.execute(text("SELECT 1"))
-            s.close()
-            checks["database"] = "ok"
+            try:
+                s.execute(text("SELECT 1"))
+                checks["database"] = "ok"
+            finally:
+                s.close()
         except Exception:
             checks["database"] = "error"
             healthy = False

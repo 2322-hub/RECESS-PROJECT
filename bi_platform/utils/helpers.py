@@ -46,10 +46,11 @@ def chunk_dataframe(df, chunk_size: int = 50_000):
 
 def safe_json_serialize(obj):
     """Make objects JSON-serialisable (handles numpy types)."""
-    import numpy as np
-    import pandas as pd
     from datetime import date, datetime
     from decimal import Decimal
+
+    import numpy as np
+    import pandas as pd
 
     if isinstance(obj, (date, datetime)):
         return obj.isoformat()

@@ -6,7 +6,12 @@ from .data_processor import DataProcessor
 
 
 class AnalyticsEngine:
-    """Higher-level analytics built on top of DataProcessor."""
+    """Higher-level analytics built on top of DataProcessor.
+
+    Supports two modes:
+    - DataFrame-based (small datasets, loads full data into pandas)
+    - SQL-based (large datasets, all aggregations pushed to database)
+    """
 
     dp = DataProcessor()
 
@@ -42,11 +47,7 @@ class AnalyticsEngine:
             agg_dict["profit"] = "sum"
         if "quantity" in tmp.columns:
             agg_dict["quantity"] = "sum"
-        monthly = (
-            tmp.groupby(tmp["date"].dt.to_period("M"))
-            .agg(agg_dict)
-            .reset_index()
-        )
+        monthly = tmp.groupby(tmp["date"].dt.to_period("M")).agg(agg_dict).reset_index()
         monthly["date"] = monthly["date"].astype(str)
         monthly = monthly.rename(columns={"total_revenue": "revenue"})
         if "profit" not in monthly.columns:
@@ -69,12 +70,7 @@ class AnalyticsEngine:
             agg_dict["orders"] = ("quantity", "count")
         agg_dict["revenue"] = ("total_revenue", "sum")
         agg_dict["avg_order_value"] = ("total_revenue", "mean")
-        result = (
-            df.groupby("region")
-            .agg(**agg_dict)
-            .round(2)
-            .reset_index()
-        )
+        result = df.groupby("region").agg(**agg_dict).round(2).reset_index()
         return result.to_dict(orient="records")
 
     # ------------------------------------------------------------------
@@ -92,13 +88,7 @@ class AnalyticsEngine:
             agg_dict["profit"] = "sum"
         if "quantity" in df.columns:
             agg_dict["quantity"] = "sum"
-        agg = (
-            df.groupby(group_cols)
-            .agg(agg_dict)
-            .round(2)
-            .sort_values("total_revenue", ascending=False)
-            .reset_index()
-        )
+        agg = df.groupby(group_cols).agg(agg_dict).round(2).sort_values("total_revenue", ascending=False).reset_index()
         return agg.to_dict(orient="records")
 
     # ------------------------------------------------------------------
@@ -107,10 +97,14 @@ class AnalyticsEngine:
     @staticmethod
     def website_summary(wa_df: pd.DataFrame) -> dict[str, Any]:
         empty = {
-            "total_page_views": 0, "total_unique_visitors": 0,
-            "avg_bounce_rate": 0, "avg_session_duration": 0,
-            "total_conversions": 0, "total_revenue": 0,
-            "conversion_rate": 0, "daily_trend": [],
+            "total_page_views": 0,
+            "total_unique_visitors": 0,
+            "avg_bounce_rate": 0,
+            "avg_session_duration": 0,
+            "total_conversions": 0,
+            "total_revenue": 0,
+            "conversion_rate": 0,
+            "daily_trend": [],
         }
         if wa_df.empty or "date" not in wa_df.columns:
             return empty
@@ -128,21 +122,15 @@ class AnalyticsEngine:
         ]:
             summary[key] = int(tmp[col].sum()) if col in tmp.columns else 0
         if "bounce_rate" in tmp.columns:
-            summary["avg_bounce_rate"] = round(
-                float(tmp["bounce_rate"].mean()) * 100, 2
-            )
+            summary["avg_bounce_rate"] = round(float(tmp["bounce_rate"].mean()) * 100, 2)
         else:
             summary["avg_bounce_rate"] = 0
         if "avg_session_duration" in tmp.columns:
-            summary["avg_session_duration"] = round(
-                float(tmp["avg_session_duration"].mean()), 2
-            )
+            summary["avg_session_duration"] = round(float(tmp["avg_session_duration"].mean()), 2)
         else:
             summary["avg_session_duration"] = 0
         uv = summary["total_unique_visitors"]
-        summary["conversion_rate"] = round(
-            float(summary["total_conversions"] / max(uv, 1) * 100), 2
-        )
+        summary["conversion_rate"] = round(float(summary["total_conversions"] / max(uv, 1) * 100), 2)
         trend_cols: dict[str, tuple[str, str]] = {
             "page_views": ("page_views", "sum"),
         }
@@ -150,9 +138,7 @@ class AnalyticsEngine:
             trend_cols["visitors"] = ("unique_visitors", "sum")
         if "revenue" in tmp.columns:
             trend_cols["revenue"] = ("revenue", "sum")
-        daily = tmp.groupby("date").agg(
-            **{k: (v[0], v[1]) for k, v in trend_cols.items()}
-        ).reset_index()
+        daily = tmp.groupby("date").agg(**{k: (v[0], v[1]) for k, v in trend_cols.items()}).reset_index()
         daily["date"] = daily["date"].astype(str)
         summary["daily_trend"] = daily.to_dict(orient="records")
         return summary
@@ -163,9 +149,12 @@ class AnalyticsEngine:
     @staticmethod
     def customer_insights(cust_df: pd.DataFrame) -> dict[str, Any]:
         empty = {
-            "total_customers": 0, "avg_lifetime_value": 0,
-            "total_lifetime_value": 0, "avg_orders": 0,
-            "by_segment": [], "by_region": [],
+            "total_customers": 0,
+            "avg_lifetime_value": 0,
+            "total_lifetime_value": 0,
+            "avg_orders": 0,
+            "by_segment": [],
+            "by_region": [],
         }
         if cust_df.empty:
             return empty
@@ -197,10 +186,7 @@ class AnalyticsEngine:
             result["by_segment"] = []
         if "region" in cust_df.columns:
             by_reg = (
-                cust_df.groupby("region")
-                .agg(count=("id", "count"), avg_ltv=(ltv_col, "mean"))
-                .round(2)
-                .reset_index()
+                cust_df.groupby("region").agg(count=("id", "count"), avg_ltv=(ltv_col, "mean")).round(2).reset_index()
             )
             result["by_region"] = by_reg.to_dict(orient="records")
         else:
@@ -214,8 +200,7 @@ class AnalyticsEngine:
         kpis = self.dp.compute_kpis(sales_df)
         top_products = (
             self.dp.top_n(sales_df, "product_name", "total_revenue")
-            if "product_name" in sales_df.columns
-            and "total_revenue" in sales_df.columns
+            if "product_name" in sales_df.columns and "total_revenue" in sales_df.columns
             else []
         )
         return {
@@ -229,4 +214,48 @@ class AnalyticsEngine:
             "customer_insights": self.customer_insights(cust_df),
             "correlation": self.dp.correlation_matrix(sales_df),
             "profile": self.dp.profile(sales_df),
+        }
+
+    # ------------------------------------------------------------------
+    # SQL-backed dashboard (for large datasets — no full-table loads)
+    # ------------------------------------------------------------------
+    def build_dashboard_payload_sql(self, db_connector, conn: str) -> dict:
+        """Build full dashboard payload using only SQL aggregations.
+
+        Never loads the full table into Python memory.
+        Suitable for datasets with millions of rows.
+        """
+        kpis = db_connector.sql_kpis(conn)
+        revenue_breakdown = db_connector.sql_revenue_breakdown(conn)
+        monthly_trends = db_connector.sql_monthly_trends(conn)
+        regional_comparison = db_connector.sql_regional_comparison(conn)
+        product_performance = db_connector.sql_product_performance(conn)
+        top_products = db_connector.sql_top_n(conn, "product_name", "total_revenue", n=10)
+        website_analytics = db_connector.sql_website_summary(conn)
+        customer_insights = db_connector.sql_customer_insights(conn)
+
+        correlation = {}
+        profile = {}
+        try:
+            sample = db_connector.execute_query(
+                conn,
+                "SELECT total_revenue, cost, profit, quantity, unit_price FROM sales TABLESAMPLE BERNOULLI(1) LIMIT 5000",
+            )
+            if not sample.empty:
+                correlation = db_connector.sql_correlation_matrix(sample)
+                profile = self.dp.profile(sample)
+        except Exception:
+            pass
+
+        return {
+            "kpis": kpis,
+            "revenue_breakdown": revenue_breakdown,
+            "monthly_trends": monthly_trends,
+            "regional_comparison": regional_comparison,
+            "product_performance": product_performance,
+            "top_products": top_products,
+            "website_analytics": website_analytics,
+            "customer_insights": customer_insights,
+            "correlation": correlation,
+            "profile": profile,
         }
