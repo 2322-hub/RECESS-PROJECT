@@ -23,11 +23,22 @@ N_WEB_DAYS = 1_000
 
 regions = np.array(["North", "South", "East", "West", "Central", "Pacific", "Mountain"])
 categories = np.array(["Electronics", "Clothing", "Food", "Furniture", "Software", "Hardware"])
-products = np.array([
-    "Widget A", "Widget B", "Gadget X", "Gadget Y", "Service Pro",
-    "Basic Plan", "Enterprise Suite", "Cloud Storage", "Analytics Tool",
-    "Security Shield", "Dev Toolkit", "Mobile App",
-])
+products = np.array(
+    [
+        "Widget A",
+        "Widget B",
+        "Gadget X",
+        "Gadget Y",
+        "Service Pro",
+        "Basic Plan",
+        "Enterprise Suite",
+        "Cloud Storage",
+        "Analytics Tool",
+        "Security Shield",
+        "Dev Toolkit",
+        "Mobile App",
+    ]
+)
 segments = np.array(["Enterprise", "SMB", "Consumer", "Government", "Education"])
 
 rng = np.random.default_rng(42)
@@ -40,7 +51,8 @@ with engine.begin() as conn:
 
 print("Creating tables...")
 with engine.begin() as conn:
-    conn.execute(text("""
+    conn.execute(
+        text("""
         CREATE TABLE sales (
             id SERIAL PRIMARY KEY,
             date TEXT,
@@ -54,8 +66,10 @@ with engine.begin() as conn:
             profit REAL,
             customer_segment TEXT
         )
-    """))
-    conn.execute(text("""
+    """)
+    )
+    conn.execute(
+        text("""
         CREATE TABLE customers (
             id SERIAL PRIMARY KEY,
             name TEXT,
@@ -66,8 +80,10 @@ with engine.begin() as conn:
             orders_count INTEGER,
             segment TEXT
         )
-    """))
-    conn.execute(text("""
+    """)
+    )
+    conn.execute(
+        text("""
         CREATE TABLE website_analytics (
             id SERIAL PRIMARY KEY,
             date TEXT,
@@ -78,7 +94,8 @@ with engine.begin() as conn:
             conversions INTEGER,
             revenue REAL
         )
-    """))
+    """)
+    )
 
 
 def seed_sales(n: int):
@@ -99,22 +116,24 @@ def seed_sales(n: int):
     sale_cost = np.round(sale_total * sale_cost_pct, 2)
     sale_profit = np.round(sale_total - sale_cost, 2)
 
-    df = pd.DataFrame({
-        "date": sale_dates,
-        "region": sale_regions,
-        "product_category": sale_categories,
-        "product_name": sale_products,
-        "quantity": sale_qty.astype(int),
-        "unit_price": sale_price,
-        "total_revenue": sale_total,
-        "cost": sale_cost,
-        "profit": sale_profit,
-        "customer_segment": sale_segments,
-    })
+    df = pd.DataFrame(
+        {
+            "date": sale_dates,
+            "region": sale_regions,
+            "product_category": sale_categories,
+            "product_name": sale_products,
+            "quantity": sale_qty.astype(int),
+            "unit_price": sale_price,
+            "total_revenue": sale_total,
+            "cost": sale_cost,
+            "profit": sale_profit,
+            "customer_segment": sale_segments,
+        }
+    )
 
     chunk = 200_000
     for i in range(0, n, chunk):
-        df.iloc[i:i + chunk].to_sql("sales", engine, if_exists="append", index=False)
+        df.iloc[i : i + chunk].to_sql("sales", engine, if_exists="append", index=False)
         print(f"  {min(i + chunk, n):>10,} / {n:,} rows")
 
     print(f"Sales done in {time.time() - start:.1f}s")
@@ -127,19 +146,21 @@ def seed_customers(n: int):
     date_arr = np.array([str(d.date()) for d in dates])
     cust_dates = rng.choice(date_arr, size=n)
 
-    df = pd.DataFrame({
-        "name": [f"Customer_{i}" for i in range(1, n + 1)],
-        "email": [f"customer{i}@example.com" for i in range(1, n + 1)],
-        "region": rng.choice(regions, size=n),
-        "signup_date": cust_dates,
-        "lifetime_value": np.round(rng.uniform(100, 5_000_000, size=n), 2),
-        "orders_count": rng.integers(1, 500, size=n).astype(int),
-        "segment": rng.choice(segments, size=n),
-    })
+    df = pd.DataFrame(
+        {
+            "name": [f"Customer_{i}" for i in range(1, n + 1)],
+            "email": [f"customer{i}@example.com" for i in range(1, n + 1)],
+            "region": rng.choice(regions, size=n),
+            "signup_date": cust_dates,
+            "lifetime_value": np.round(rng.uniform(100, 5_000_000, size=n), 2),
+            "orders_count": rng.integers(1, 500, size=n).astype(int),
+            "segment": rng.choice(segments, size=n),
+        }
+    )
 
     chunk = 200_000
     for i in range(0, n, chunk):
-        df.iloc[i:i + chunk].to_sql("customers", engine, if_exists="append", index=False)
+        df.iloc[i : i + chunk].to_sql("customers", engine, if_exists="append", index=False)
         print(f"  {min(i + chunk, n):>10,} / {n:,} customers")
 
     print(f"Customers done in {time.time() - start:.1f}s")
@@ -154,15 +175,17 @@ def seed_website_analytics(n_days: int):
     unique_visitors = (page_views * rng.uniform(0.4, 0.85, size=n_days)).astype(int)
     conversions = np.minimum(rng.integers(0, 500, size=n_days), unique_visitors)
 
-    df = pd.DataFrame({
-        "date": [str(d.date()) for d in wa_dates],
-        "page_views": page_views.astype(int),
-        "unique_visitors": unique_visitors.astype(int),
-        "bounce_rate": np.round(rng.uniform(0.15, 0.75, size=n_days), 4),
-        "avg_session_duration": np.round(rng.uniform(20, 600, size=n_days), 2),
-        "conversions": conversions.astype(int),
-        "revenue": np.round(rng.uniform(0, 50_000_000, size=n_days), 2),
-    })
+    df = pd.DataFrame(
+        {
+            "date": [str(d.date()) for d in wa_dates],
+            "page_views": page_views.astype(int),
+            "unique_visitors": unique_visitors.astype(int),
+            "bounce_rate": np.round(rng.uniform(0.15, 0.75, size=n_days), 4),
+            "avg_session_duration": np.round(rng.uniform(20, 600, size=n_days), 2),
+            "conversions": conversions.astype(int),
+            "revenue": np.round(rng.uniform(0, 50_000_000, size=n_days), 2),
+        }
+    )
 
     df.to_sql("website_analytics", engine, if_exists="append", index=False)
     print(f"Website analytics done in {time.time() - start:.1f}s")

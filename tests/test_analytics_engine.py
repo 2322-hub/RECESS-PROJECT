@@ -1,7 +1,8 @@
+from unittest.mock import MagicMock
+
 import numpy as np
 import pandas as pd
 import pytest
-from unittest.mock import MagicMock
 
 from bi_platform.core.analytics_engine import AnalyticsEngine
 from bi_platform.core.database_connector import DatabaseConnector
@@ -147,13 +148,15 @@ class TestSQLModeAnalytics:
             "total_customers": 500,
             "avg_lifetime_value": 2000,
         }
-        db.execute_query.return_value = pd.DataFrame({
-            "total_revenue": np.random.uniform(100, 10000, 5000),
-            "cost": np.random.uniform(50, 5000, 5000),
-            "profit": np.random.uniform(50, 5000, 5000),
-            "quantity": np.random.randint(1, 50, 5000),
-            "unit_price": np.random.uniform(5, 500, 5000),
-        })
+        db.execute_query.return_value = pd.DataFrame(
+            {
+                "total_revenue": np.random.uniform(100, 10000, 5000),
+                "cost": np.random.uniform(50, 5000, 5000),
+                "profit": np.random.uniform(50, 5000, 5000),
+                "quantity": np.random.randint(1, 50, 5000),
+                "unit_price": np.random.uniform(5, 500, 5000),
+            }
+        )
         db.sql_correlation_matrix.return_value = {
             "columns": ["total_revenue", "cost", "profit", "quantity", "unit_price"],
             "matrix": [[1.0, 0.5, 0.5, 0.3, 0.2]] * 5,

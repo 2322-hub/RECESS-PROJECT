@@ -40,5 +40,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Temp scripts
+temp_*.py
+
 # Docker
 docker-compose.override.yml
