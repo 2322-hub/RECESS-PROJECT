@@ -112,7 +112,7 @@ def _get_cached(name: str, conn: str = "demo") -> pd.DataFrame:
     if not _TABLE_RE.match(name):
         raise ValueError(f"Invalid table name: {name}")
     if cache_key not in _df_cache:
-        _df_cache[cache_key] = db_connector.execute_query(conn, f"SELECT * FROM {name}")
+        _df_cache[cache_key] = db_connector.execute_query(conn, f"SELECT * FROM {name}")  # noqa: S608
     return _df_cache[cache_key].copy()
 
 
@@ -130,6 +130,7 @@ def _use_sql_mode(conn: str) -> bool:
             return _row_count_cache[cache_key] > Config.MAX_ROWS_IN_MEMORY
         try:
             from sqlalchemy import text
+
             engine = db_connector._engines.get(conn)
             if engine is None:
                 return False
@@ -146,7 +147,18 @@ def _use_sql_mode(conn: str) -> bool:
 # Role-based access helper
 # ------------------------------------------------------------------
 _ROLE_SECTIONS = {
-    "admin": {"overview", "revenue", "products", "website", "customers", "data-explorer", "sql-query", "forecasting", "anomalies", "admin"},
+    "admin": {
+        "overview",
+        "revenue",
+        "products",
+        "website",
+        "customers",
+        "data-explorer",
+        "sql-query",
+        "forecasting",
+        "anomalies",
+        "admin",
+    },
     "viewer": {"overview", "revenue", "products", "website", "customers"},
 }
 
@@ -185,10 +197,15 @@ def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         products_df = db_connector.execute_query(conn, "SELECT * FROM products")
         sales = db_connector.execute_query(conn, "SELECT * FROM sales")
         sales = sales.merge(products_df, left_on="product_id", right_on="id", suffixes=("", "_prod"))
-        sales = sales.rename(columns={
-            "sale_date": "date", "total": "total_revenue", "price": "unit_price",
-            "category": "product_category", "name": "product_name",
-        })
+        sales = sales.rename(
+            columns={
+                "sale_date": "date",
+                "total": "total_revenue",
+                "price": "unit_price",
+                "category": "product_category",
+                "name": "product_name",
+            }
+        )
         sales["cost"] = 0.0
         sales["profit"] = sales["total_revenue"].astype(float)
         sales["region"] = "All"
@@ -199,7 +216,7 @@ def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         sales = _normalize_columns(sales, "sales")
     else:
         for tbl in tables:
-            raw = db_connector.execute_query(conn, f"SELECT * FROM {tbl}")
+            raw = db_connector.execute_query(conn, f"SELECT * FROM {tbl}")  # noqa: S608
             if not raw.empty:
                 sales = _normalize_columns(raw, "sales")
                 break
@@ -288,12 +305,14 @@ def api_custom_query():
     try:
         df = db_connector.execute_query(conn, sql)
         limited = df.head(Config.SQL_MAX_ROWS)
-        return _json_response({
-            "columns": list(limited.columns),
-            "rows": limited.to_dict(orient="records"),
-            "row_count": len(df),
-            "truncated": len(df) > Config.SQL_MAX_ROWS,
-        })
+        return _json_response(
+            {
+                "columns": list(limited.columns),
+                "rows": limited.to_dict(orient="records"),
+                "row_count": len(df),
+                "truncated": len(df) > Config.SQL_MAX_ROWS,
+            }
+        )
     except Exception:
         logger.warning("Query failed")
         return jsonify({"error": "Query execution failed"}), 400
@@ -313,7 +332,7 @@ def api_table_data(table_name: str):
         df = _get_cached(table_name)
     else:
         try:
-            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")
+            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")  # noqa: S608
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
     if search:
@@ -327,15 +346,17 @@ def api_table_data(table_name: str):
             df = df.sort_values(col, ascending=not desc)
     total = len(df)
     start = (page - 1) * per_page
-    chunk = df.iloc[start: start + per_page]
-    return _json_response({
-        "columns": list(chunk.columns),
-        "rows": chunk.to_dict(orient="records"),
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "pages": (total + per_page - 1) // per_page,
-    })
+    chunk = df.iloc[start : start + per_page]
+    return _json_response(
+        {
+            "columns": list(chunk.columns),
+            "rows": chunk.to_dict(orient="records"),
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page,
+        }
+    )
 
 
 @api_bp.route("/connect", methods=["POST"])
@@ -422,7 +443,7 @@ def api_filter():
         df = _get_cached(table)
     else:
         try:
-            df = db_connector.execute_query(conn, f"SELECT * FROM {table}")
+            df = db_connector.execute_query(conn, f"SELECT * FROM {table}")  # noqa: S608
             df = _normalize_columns(df, "sales")
         except (ValueError, KeyError):
             df = _get_cached(table, "demo")
@@ -452,7 +473,7 @@ def api_export_csv(table_name: str):
         if conn == "demo":
             df = _get_cached(table_name)
         else:
-            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")
+            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")  # noqa: S608
             df = _normalize_columns(df, table_name)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -567,7 +588,7 @@ def api_anomalies():
                 daily_trend = wa_summary.get("daily_trend", [])
             website_anomalies = AnomalyDetector.detect_website_anomalies(daily_trend)
         except Exception:
-            pass
+            logger.debug("Website anomaly detection skipped")
 
         result = {
             "revenue": revenue_anomalies,
@@ -608,6 +629,7 @@ def api_generate_report(fmt: str):
     try:
         if fmt == "pdf":
             from .reports.pdf_report import PDFReportGenerator
+
             pdf_bytes = PDFReportGenerator.generate(dashboard_data)
             return Response(
                 pdf_bytes,
@@ -616,6 +638,7 @@ def api_generate_report(fmt: str):
             )
         else:
             from .reports.excel_report import ExcelReportGenerator
+
             excel_bytes = ExcelReportGenerator.generate(dashboard_data)
             return Response(
                 excel_bytes,
@@ -667,10 +690,12 @@ def api_nl_query():
 @api_bp.route("/user-role")
 @login_required
 def api_user_role():
-    return jsonify({
-        "username": session.get("user", ""),
-        "role": session.get("role", "viewer"),
-    })
+    return jsonify(
+        {
+            "username": session.get("user", ""),
+            "role": session.get("role", "viewer"),
+        }
+    )
 
 
 # ------------------------------------------------------------------

@@ -23,6 +23,7 @@ if __name__ == "__main__":
 
     try:
         from bi_platform.tasks import get_celery_app
+
         celery = get_celery_app()
         if celery:
             logger.info("Celery app initialized")
@@ -31,7 +32,7 @@ if __name__ == "__main__":
 
     socketio.run(
         app,
-        host="0.0.0.0",
+        host="0.0.0.0",  # noqa: S104
         port=int(os.environ.get("PORT", 5000)),
         debug=debug,
         allow_unsafe_werkzeug=debug,

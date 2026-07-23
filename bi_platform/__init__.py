@@ -49,19 +49,19 @@ def create_app(config_class=Config):
     metrics.init_app(app)
 
     from .routes import (
+        api_anomalies,
         api_connect_db,
         api_custom_query,
         api_custom_query2,
         api_dashboard_data,
         api_filter,
-        api_list_connections,
-        handle_connect,
-        handle_refresh,
         api_forecast,
-        api_anomalies,
         api_generate_report,
+        api_list_connections,
         api_nl_query,
         api_user_role,
+        handle_connect,
+        handle_refresh,
     )
 
     csrf.exempt(api_dashboard_data)
@@ -79,19 +79,24 @@ def create_app(config_class=Config):
     csrf.exempt(api_user_role)
 
     from .auth import auth_bp
+
     app.register_blueprint(auth_bp)
 
     from .admin import admin_bp
+
     app.register_blueprint(admin_bp)
 
-    from .saved_views import saved_views_bp, init_saved_views_csrf
+    from .saved_views import init_saved_views_csrf, saved_views_bp
+
     app.register_blueprint(saved_views_bp)
     init_saved_views_csrf(csrf)
 
     from .routes import bp as main_bp
+
     app.register_blueprint(main_bp)
 
     from .routes import api_bp
+
     app.register_blueprint(api_bp)
 
     @app.route("/health")
@@ -102,6 +107,7 @@ def create_app(config_class=Config):
 
         try:
             from sqlalchemy import text
+
             from .models import SessionLocal
 
             s = SessionLocal()
@@ -116,6 +122,7 @@ def create_app(config_class=Config):
 
         try:
             from .cache import get_redis
+
             r = get_redis()
             if r:
                 r.ping()
@@ -127,6 +134,7 @@ def create_app(config_class=Config):
 
         if not healthy:
             from flask import make_response
+
             resp = make_response(jsonify({"status": "unhealthy", "checks": checks}))
             resp.status_code = 503
             return resp

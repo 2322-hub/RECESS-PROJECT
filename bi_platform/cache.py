@@ -63,7 +63,7 @@ class CacheLayer:
                 if val:
                     return json.loads(val)
             except Exception:
-                pass
+                logger.debug("Redis GET failed for key: %s", key)
             return None
 
         now = time.time()
@@ -83,7 +83,7 @@ class CacheLayer:
                 r.setex(f"bi:{key}", ttl, json.dumps(value, default=str))
                 return
             except Exception:
-                pass
+                logger.debug("Redis SET failed for key: %s", key)
 
         _memory_cache[key] = (time.time(), value)
         _evict_stale()
@@ -97,7 +97,7 @@ class CacheLayer:
                 if keys:
                     r.delete(*keys)
             except Exception:
-                pass
+                logger.debug("Redis DELETE failed for pattern: %s", pattern)
         if not pattern or pattern == "*":
             _memory_cache.clear()
         else:

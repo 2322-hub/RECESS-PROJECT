@@ -91,21 +91,31 @@ class TestRoutes:
         assert "columns" in data
         assert "rows" in data
 
-    def test_api_report_export_csv(self, authenticated_client):
-        res = authenticated_client.get("/api/v1/report/export/csv")
+    def test_api_report_export_pdf(self, authenticated_client):
+        res = authenticated_client.post(
+            "/api/v1/report/pdf",
+            json={"conn": "demo"},
+            content_type="application/json",
+        )
         assert res.status_code == 200
-        assert res.mimetype == "text/csv"
-        assert "report_export.csv" in res.headers["Content-Disposition"]
+        assert res.mimetype == "application/pdf"
 
     def test_api_report_export_excel(self, authenticated_client):
-        res = authenticated_client.get("/api/v1/report/export/excel")
+        res = authenticated_client.post(
+            "/api/v1/report/excel",
+            json={"conn": "demo"},
+            content_type="application/json",
+        )
         assert res.status_code == 200
         assert res.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    def test_api_report_preview(self, authenticated_client):
-        res = authenticated_client.get("/api/v1/report/preview")
-        assert res.status_code == 200
-        assert b"Report Preview" in res.data
+    def test_api_report_invalid_format(self, authenticated_client):
+        res = authenticated_client.post(
+            "/api/v1/report/csv",
+            json={"conn": "demo"},
+            content_type="application/json",
+        )
+        assert res.status_code == 400
 
     def test_invalid_table_name(self, authenticated_client):
         res = authenticated_client.get("/api/v1/table/invalid;DROP")

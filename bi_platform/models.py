@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Text, DateTime, create_engine
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from werkzeug.security import generate_password_hash
 
@@ -36,6 +36,7 @@ class SavedView(Base):
 
     def to_dict(self):
         import json
+
         return {
             "id": self.id,
             "user_id": self.user_id,
@@ -68,6 +69,7 @@ class ScheduledReport(Base):
 
     def to_dict(self):
         import json
+
         return {
             "id": self.id,
             "user_id": self.user_id,

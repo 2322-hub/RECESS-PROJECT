@@ -1,7 +1,6 @@
 import logging
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -30,18 +29,19 @@ class AnomalyDetector:
                 return {"anomalies": [], "summary": {"mean": float(mean), "std": 0}}
 
             z_scores = (ts - mean) / std
-            anomaly_mask = z_scores.abs() > z_threshold
 
             anomalies = []
-            for date, val, z in zip(dates, revenues, z_scores):
+            for date, val, z in zip(dates, revenues, z_scores, strict=False):
                 if abs(z) > z_threshold:
-                    anomalies.append({
-                        "date": date,
-                        "value": round(val, 2),
-                        "z_score": round(float(z), 3),
-                        "type": "spike" if z > 0 else "drop",
-                        "deviation_pct": round(float((val - mean) / mean * 100), 1),
-                    })
+                    anomalies.append(
+                        {
+                            "date": date,
+                            "value": round(val, 2),
+                            "z_score": round(float(z), 3),
+                            "type": "spike" if z > 0 else "drop",
+                            "deviation_pct": round(float((val - mean) / mean * 100), 1),
+                        }
+                    )
 
             q1 = ts.quantile(0.25)
             q3 = ts.quantile(0.75)
@@ -92,12 +92,14 @@ class AnomalyDetector:
                 mask = z.abs() > 2.5
                 anomalies = []
                 for idx in df.index[mask]:
-                    anomalies.append({
-                        "date": str(df.loc[idx, "date"]),
-                        "metric": metric,
-                        "value": round(float(df.loc[idx, metric]), 2),
-                        "z_score": round(float(z[idx]), 3),
-                    })
+                    anomalies.append(
+                        {
+                            "date": str(df.loc[idx, "date"]),
+                            "metric": metric,
+                            "value": round(float(df.loc[idx, metric]), 2),
+                            "z_score": round(float(z[idx]), 3),
+                        }
+                    )
                 results[metric] = anomalies
 
             return {"anomalies": results}

@@ -3,15 +3,17 @@ import logging
 from datetime import datetime
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Border, Font, PatternFill, Side
 
 logger = logging.getLogger(__name__)
 
 HEADER_FILL = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
 HEADER_FONT = Font(color="FFFFFF", bold=True, size=11)
 THIN_BORDER = Border(
-    left=Side(style="thin"), right=Side(style="thin"),
-    top=Side(style="thin"), bottom=Side(style="thin"),
+    left=Side(style="thin"),
+    right=Side(style="thin"),
+    top=Side(style="thin"),
+    bottom=Side(style="thin"),
 )
 
 
@@ -78,13 +80,15 @@ class ExcelReportGenerator:
             cell.font = HEADER_FONT
             cell.border = THIN_BORDER
         for p in dashboard_data.get("product_performance", []):
-            ws4.append([
-                p.get("product_category", ""),
-                p.get("product_name", ""),
-                p.get("total_revenue", 0),
-                p.get("profit", 0),
-                p.get("quantity", 0),
-            ])
+            ws4.append(
+                [
+                    p.get("product_category", ""),
+                    p.get("product_name", ""),
+                    p.get("total_revenue", 0),
+                    p.get("profit", 0),
+                    p.get("quantity", 0),
+                ]
+            )
         for col_letter in ["A", "B", "C", "D", "E"]:
             ws4.column_dimensions[col_letter].width = 18
 
@@ -106,7 +110,15 @@ class ExcelReportGenerator:
             cell.font = HEADER_FONT
             cell.border = THIN_BORDER
         for r in dashboard_data.get("regional_comparison", []):
-            ws6.append([r.get("region", ""), r.get("revenue", 0), r.get("profit", 0), r.get("orders", 0), r.get("avg_order_value", 0)])
+            ws6.append(
+                [
+                    r.get("region", ""),
+                    r.get("revenue", 0),
+                    r.get("profit", 0),
+                    r.get("orders", 0),
+                    r.get("avg_order_value", 0),
+                ]
+            )
         for col_letter in ["A", "B", "C", "D", "E"]:
             ws6.column_dimensions[col_letter].width = 18
 

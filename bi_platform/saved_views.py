@@ -13,13 +13,23 @@ saved_views_bp = Blueprint("saved_views", __name__, url_prefix="/api/v1/views")
 _MAX_VIEW_NAME_LEN = 200
 
 _ALLOWED_SECTIONS = {
-    "overview", "revenue", "products", "website", "customers",
-    "data-explorer", "sql-query", "forecasting", "anomalies", "admin", "nl-query",
+    "overview",
+    "revenue",
+    "products",
+    "website",
+    "customers",
+    "data-explorer",
+    "sql-query",
+    "forecasting",
+    "anomalies",
+    "admin",
+    "nl-query",
 }
 
 
 def _get_user_id():
     from .models import User
+
     username = session.get("user", "")
     if not username:
         return None
@@ -40,9 +50,11 @@ def list_views():
         return jsonify({"error": "Unauthorized"}), 401
     s = SessionLocal()
     try:
-        views = s.execute(
-            select(SavedView).where(SavedView.user_id == user_id).order_by(SavedView.updated_at.desc())
-        ).scalars().all()
+        views = (
+            s.execute(select(SavedView).where(SavedView.user_id == user_id).order_by(SavedView.updated_at.desc()))
+            .scalars()
+            .all()
+        )
         result = []
         for v in views:
             d = v.to_dict()

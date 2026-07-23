@@ -18,6 +18,7 @@ def admin_required(f):
         if session.get("role") != "admin":
             return jsonify({"error": "Admin access required"}), 403
         return f(*args, **kwargs)
+
     return decorated
 
 

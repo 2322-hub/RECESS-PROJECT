@@ -6,16 +6,42 @@ logger = logging.getLogger(__name__)
 
 TABLE_SCHEMAS = {
     "sales": {
-        "columns": ["id", "date", "region", "product_category", "product_name", "quantity", "unit_price", "total_revenue", "cost", "profit", "customer_segment"],
-        "description": "Sales transactions with date, region, product info, revenue, cost, profit, and customer segment",
+        "columns": [
+            "id",
+            "date",
+            "region",
+            "product_category",
+            "product_name",
+            "quantity",
+            "unit_price",
+            "total_revenue",
+            "cost",
+            "profit",
+            "customer_segment",
+        ],
+        "description": (
+            "Sales transactions with date, region, product info, revenue, cost, profit, and customer segment"
+        ),
     },
     "customers": {
         "columns": ["id", "name", "email", "region", "signup_date", "lifetime_value", "orders_count", "segment"],
         "description": "Customer profiles with lifetime value, order count, region, and segment",
     },
     "website_analytics": {
-        "columns": ["id", "date", "page_views", "unique_visitors", "bounce_rate", "avg_session_duration", "conversions", "revenue"],
-        "description": "Daily website metrics including page views, visitors, bounce rate, session duration, conversions, and revenue",
+        "columns": [
+            "id",
+            "date",
+            "page_views",
+            "unique_visitors",
+            "bounce_rate",
+            "avg_session_duration",
+            "conversions",
+            "revenue",
+        ],
+        "description": (
+            "Daily website metrics including page views, visitors,"
+            " bounce rate, session duration, conversions, and revenue"
+        ),
     },
 }
 
@@ -36,7 +62,11 @@ class NLQueryEngine:
                 r"(?:total|sum|aggregate)\s+revenue",
                 r"how much.*(?:made|earned|revenue|sales)",
             ],
-            "template": "SELECT {group}, SUM(total_revenue) AS total_revenue FROM sales {where} GROUP BY {group} ORDER BY total_revenue DESC",
+            "template": (
+                "SELECT {group}, SUM(total_revenue) AS total_revenue"
+                " FROM sales {where} GROUP BY {group}"
+                " ORDER BY total_revenue DESC"
+            ),
             "default_group": "region",
         },
         "show_profit": {
@@ -45,7 +75,11 @@ class NLQueryEngine:
                 r"profit\s+(?:by|for|from|per|in)",
                 r"(?:total|sum)\s+profit",
             ],
-            "template": "SELECT {group}, SUM(profit) AS total_profit FROM sales {where} GROUP BY {group} ORDER BY total_profit DESC",
+            "template": (
+                "SELECT {group}, SUM(profit) AS total_profit"
+                " FROM sales {where} GROUP BY {group}"
+                " ORDER BY total_profit DESC"
+            ),
             "default_group": "region",
         },
         "show_customers": {
@@ -54,7 +88,12 @@ class NLQueryEngine:
                 r"customer\s+(?:count|number|total|list)",
                 r"how many\s+customers",
             ],
-            "template": "SELECT COUNT(*) AS total_customers, AVG(lifetime_value) AS avg_ltv, SUM(lifetime_value) AS total_ltv FROM customers {where}",
+            "template": (
+                "SELECT COUNT(*) AS total_customers,"
+                " AVG(lifetime_value) AS avg_ltv,"
+                " SUM(lifetime_value) AS total_ltv"
+                " FROM customers {where}"
+            ),
             "default_group": None,
         },
         "show_products": {
@@ -63,7 +102,15 @@ class NLQueryEngine:
                 r"(?:top|best|most)\s+\w*\s+products?\s+(?:by|for)",
                 r"product\s+performance",
             ],
-            "template": "SELECT product_name, product_category, SUM(total_revenue) AS revenue, SUM(profit) AS profit, SUM(quantity) AS quantity FROM sales {where} GROUP BY product_name, product_category ORDER BY revenue DESC LIMIT 10",
+            "template": (
+                "SELECT product_name, product_category,"
+                " SUM(total_revenue) AS revenue,"
+                " SUM(profit) AS profit,"
+                " SUM(quantity) AS quantity"
+                " FROM sales {where}"
+                " GROUP BY product_name, product_category"
+                " ORDER BY revenue DESC LIMIT 10"
+            ),
             "default_group": None,
         },
         "show_website": {
@@ -72,7 +119,14 @@ class NLQueryEngine:
                 r"website\s+(?:traffic|performance|analytics)",
                 r"(?:page\s+views|visitors|conversions|bounce\s+rate)",
             ],
-            "template": "SELECT SUM(page_views) AS total_page_views, SUM(unique_visitors) AS total_visitors, AVG(bounce_rate) AS avg_bounce_rate, SUM(conversions) AS total_conversions, SUM(revenue) AS total_revenue FROM website_analytics {where}",
+            "template": (
+                "SELECT SUM(page_views) AS total_page_views,"
+                " SUM(unique_visitors) AS total_visitors,"
+                " AVG(bounce_rate) AS avg_bounce_rate,"
+                " SUM(conversions) AS total_conversions,"
+                " SUM(revenue) AS total_revenue"
+                " FROM website_analytics {where}"
+            ),
             "default_group": None,
         },
         "show_trends": {
@@ -81,7 +135,15 @@ class NLQueryEngine:
                 r"(?:monthly|weekly|daily)\s+(?:revenue|sales|trend)",
                 r"revenue\s+over\s+time",
             ],
-            "template": "SELECT SUBSTR(date, 1, 7) AS month, SUM(total_revenue) AS revenue, SUM(profit) AS profit, SUM(quantity) AS quantity FROM sales {where} GROUP BY SUBSTR(date, 1, 7) ORDER BY month",
+            "template": (
+                "SELECT SUBSTR(date, 1, 7) AS month,"
+                " SUM(total_revenue) AS revenue,"
+                " SUM(profit) AS profit,"
+                " SUM(quantity) AS quantity"
+                " FROM sales {where}"
+                " GROUP BY SUBSTR(date, 1, 7)"
+                " ORDER BY month"
+            ),
             "default_group": None,
         },
         "show_regions": {
@@ -90,7 +152,15 @@ class NLQueryEngine:
                 r"regional\s+(?:breakdown|comparison|performance|revenue)",
                 r"(?:which|what)\s+region",
             ],
-            "template": "SELECT region, SUM(total_revenue) AS revenue, SUM(profit) AS profit, COUNT(*) AS orders FROM sales {where} GROUP BY region ORDER BY revenue DESC",
+            "template": (
+                "SELECT region,"
+                " SUM(total_revenue) AS revenue,"
+                " SUM(profit) AS profit,"
+                " COUNT(*) AS orders"
+                " FROM sales {where}"
+                " GROUP BY region"
+                " ORDER BY revenue DESC"
+            ),
             "default_group": None,
         },
     }
@@ -119,7 +189,11 @@ class NLQueryEngine:
             return {
                 "sql": None,
                 "intent": "unknown",
-                "explanation": "I couldn't understand the query. Try asking about revenue, profit, customers, products, website analytics, trends, or regions.",
+                "explanation": (
+                    "I couldn't understand the query. Try asking about"
+                    " revenue, profit, customers, products,"
+                    " website analytics, trends, or regions."
+                ),
                 "error": "Unrecognized intent",
             }
 

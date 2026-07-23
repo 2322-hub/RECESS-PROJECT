@@ -1,1 +1,1 @@
-from .helpers import format_number, generate_color_palette, chunk_dataframe, safe_json_serialize  # noqa: F401
+from .helpers import chunk_dataframe, format_number, generate_color_palette, safe_json_serialize  # noqa: F401
