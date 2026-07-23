@@ -1,22 +1,19 @@
 /* ─────────────────────────────────────────────────
-   BI Platform – Dashboard JavaScript
+   BI Platform – Dashboard JavaScript (v2.0)
    ───────────────────────────────────────────────── */
 
 (function () {
   "use strict";
 
-  // ─── State ───
   let DATA = {};
   let filteredKpis = null;
   const charts = {};
 
-  // ─── Colour palette ───
   const COLORS = [
     "#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6",
     "#ec4899","#14b8a6","#f97316","#6366f1","#06b6d4",
   ];
 
-  // ─── Helpers ───
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
 
@@ -34,9 +31,24 @@
     return n.toLocaleString();
   }
 
+  // ─── Theme ───
+  const THEME_KEY = "bi-theme";
+  function getTheme() { return localStorage.getItem(THEME_KEY) || "dark"; }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    const isLight = theme === "light";
+    Chart.defaults.color = isLight ? "#374151" : "#94a3b8";
+    Chart.defaults.borderColor = isLight ? "rgba(209,213,219,.4)" : "rgba(71,85,105,.3)";
+    document.documentElement.style.setProperty("--bg", isLight ? "#f8fafc" : "#0f172a");
+    document.documentElement.style.setProperty("--surface", isLight ? "#ffffff" : "#1e293b");
+    document.documentElement.style.setProperty("--surface-2", isLight ? "#f1f5f9" : "#334155");
+    document.documentElement.style.setProperty("--border", isLight ? "#e2e8f0" : "#475569");
+    document.documentElement.style.setProperty("--text", isLight ? "#1e293b" : "#f1f5f9");
+    document.documentElement.style.setProperty("--text-muted", isLight ? "#64748b" : "#94a3b8");
+  }
+  applyTheme(getTheme());
+
   // ─── Chart defaults ───
-  Chart.defaults.color = "#94a3b8";
-  Chart.defaults.borderColor = "rgba(71,85,105,.3)";
   Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
 
   function makeChart(id, config) {
@@ -46,6 +58,24 @@
     charts[id] = new Chart(ctx, config);
     return charts[id];
   }
+
+  // ─── Chart export as image ───
+  function exportChartAsImage(canvasId) {
+    const chart = charts[canvasId];
+    if (!chart) return;
+    const url = chart.toBase64Image("image/png", 1);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = canvasId + "_chart.png";
+    a.click();
+  }
+
+  document.addEventListener("click", function(e) {
+    if (e.target.classList.contains("chart-export-btn")) {
+      const canvas = e.target.closest(".card")?.querySelector("canvas");
+      if (canvas) exportChartAsImage(canvas.id);
+    }
+  });
 
   // ─── KPI renderer ───
   function renderKpis(containerId, kpis, scheme) {
@@ -86,7 +116,7 @@
   }
 
   // ─── Drill-down state ───
-  let activeDrillDown = null; // { filterId, value }
+  let activeDrillDown = null;
 
   function drillDown(filterId, value) {
     if (!value) return;
@@ -212,7 +242,6 @@
   function buildRevenueCharts(d) {
     const kpis = d.kpis || {};
     renderKpis("revenueKpis", kpis);
-
     const monthly = d.monthly_trends || [];
     makeChart("chartMonthlyRev", {
       type: "bar",
@@ -225,7 +254,6 @@
       },
       options: { responsive: true, plugins: { title: { display: true, text: "Monthly Revenue" } } },
     });
-
     makeChart("chartMonthlyProfit", {
       type: "line",
       data: {
@@ -234,7 +262,6 @@
       },
       options: { responsive: true, plugins: { title: { display: true, text: "Monthly Profit" } } },
     });
-
     const rc = d.regional_comparison || [];
     makeChart("chartRegionalTable", {
       type: "bar",
@@ -269,7 +296,6 @@
         onHover: drillDownHoverHandler,
       },
     });
-
     const catData = d.revenue_breakdown?.product_category || [];
     makeChart("chartCategoryRevenue", {
       type: "polarArea",
@@ -284,7 +310,6 @@
         onHover: drillDownHoverHandler,
       },
     });
-
     const pp = d.product_performance || [];
     let tableHtml = '<table><thead><tr><th>Category</th><th>Product</th><th>Revenue</th><th>Profit</th><th>Quantity</th></tr></thead><tbody>';
     pp.forEach(function(p) {
@@ -297,7 +322,6 @@
   function buildWebsiteCharts(d) {
     const wa = d.website_analytics || {};
     renderKpis("websiteKpis", wa, "website");
-
     const trend = wa.daily_trend || [];
     makeChart("chartPageViews", {
       type: "line",
@@ -310,7 +334,6 @@
       },
       options: { responsive: true, plugins: { title: { display: true, text: "Daily Page Views & Visitors" } } },
     });
-
     makeChart("chartConversions", {
       type: "bar",
       data: {
@@ -324,7 +347,6 @@
   function buildCustomerCharts(d) {
     const ci = d.customer_insights || {};
     renderKpis("customerKpis", ci, "customer");
-
     const bySeg = ci.by_segment || [];
     makeChart("chartCustSegment", {
       type: "bar",
@@ -342,7 +364,6 @@
         onHover: drillDownHoverHandler,
       },
     });
-
     const byReg = ci.by_region || [];
     makeChart("chartCustRegion", {
       type: "doughnut",
@@ -357,21 +378,6 @@
         onHover: drillDownHoverHandler,
       },
     });
-
-  }
-
-  // ─── Master render ───
-  function renderAlerts(alerts) {
-    const el = document.getElementById("alertList");
-    if (!el) return;
-    if (!alerts || !alerts.length) {
-      el.innerHTML = '<div class="alert-item info"><div class="alert-dot"></div><div><div class="alert-title">No alerts</div><div class="alert-message">Everything looks calm right now.</div></div></div>';
-      return;
-    }
-    el.innerHTML = alerts.map(a => {
-      const cls = a.type || "info";
-      return '<div class="alert-item ' + escapeHtml(cls) + '"><div class="alert-dot"></div><div><div class="alert-title">' + escapeHtml(a.title) + '</div><div class="alert-message">' + escapeHtml(a.message) + '</div></div></div>';
-    }).join("");
   }
 
   function renderAll(d) {
@@ -382,10 +388,8 @@
     buildProductCharts(d);
     buildWebsiteCharts(d);
     buildCustomerCharts(d);
-    renderAlerts(d.alerts || []);
   }
 
-  // ─── Error banner ───
   function showError(msg) {
     let bar = document.getElementById("errorBar");
     if (!bar) {
@@ -404,7 +408,6 @@
     if (bar) bar.style.display = "none";
   }
 
-  // ─── Data Fetching ───
   let _lastConn = null;
   function showSpinner() { document.getElementById("spinnerOverlay").classList.add("active"); }
   function hideSpinner() { document.getElementById("spinnerOverlay").classList.remove("active"); }
@@ -425,23 +428,19 @@
       if (res.status === 401 || res.redirected) { window.location.href = "/login"; return; }
       const text = await res.text();
       let d;
-      try { d = JSON.parse(text); } catch (_) { showError("Server error (HTTP " + res.status + "). Check server logs."); console.error("Non-JSON response:", text.slice(0, 500)); return; }
-      if (d.error) { hideSpinner(); showError("Data load error: " + d.error + " (conn: " + (d.conn || conn) + ")"); console.error("API error:", d); return; }
+      try { d = JSON.parse(text); } catch (_) { showError("Server error (HTTP " + res.status + ")."); console.error("Non-JSON:", text.slice(0, 500)); return; }
+      if (d.error) { hideSpinner(); showError("Data load error: " + d.error); console.error("API error:", d); return; }
       hideError();
       renderAll(d);
       populateFilters(d);
       hideSpinner();
-      if (d._conn && d._conn !== "demo") {
-        console.log("Dashboard loaded from '" + d._conn + "': " + d._sales_rows + " sales rows");
-      }
     } catch (e) {
       hideSpinner();
-      showError("Failed to load dashboard data: " + e.message);
-      console.error("Failed to load dashboard data", e);
+      showError("Failed to load: " + e.message);
+      console.error("Fetch error", e);
     }
   }
 
-  // ─── Filters ───
   function populateFilters(d) {
     const regions = new Set();
     const categories = new Set();
@@ -507,33 +506,22 @@
     });
   });
 
-  // ─── Menu toggle (mobile) ───
+  // ─── Menu toggle ───
   $("#menuToggle").addEventListener("click", () => {
     document.getElementById("sidebar").classList.toggle("open");
   });
 
-  // ─── Refresh button ───
+  // ─── Refresh ───
   $("#refreshBtn").addEventListener("click", fetchData);
 
-  function openReportExport(type) {
-    const conn = document.getElementById("activeConn").value || "demo";
-    if (type === "csv") {
-      window.location.href = "/api/v1/report/export/csv?conn=" + encodeURIComponent(conn);
-      return;
-    }
-    if (type === "excel") {
-      window.location.href = "/api/v1/report/export/excel?conn=" + encodeURIComponent(conn);
-      return;
-    }
-    const url = "/api/v1/report/preview?conn=" + encodeURIComponent(conn) + "&print=1";
-    const popup = window.open(url, "_blank", "noopener,noreferrer");
-    if (popup) popup.focus();
-  }
-
-  $("#reportCsvBtn").addEventListener("click", () => openReportExport("csv"));
-  $("#reportExcelBtn").addEventListener("click", () => openReportExport("excel"));
-  $("#reportPdfBtn").addEventListener("click", () => openReportExport("pdf"));
-  $("#reportPrintBtn").addEventListener("click", () => openReportExport("pdf"));
+  // ─── Theme toggle ───
+  $("#themeToggle").addEventListener("click", () => {
+    const current = getTheme();
+    const next = current === "dark" ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+    Object.values(charts).forEach(c => { if (c && c.update) c.update(); });
+  });
 
   // ─── Filter change ───
   ["regionFilter", "categoryFilter", "segmentFilter"].forEach(id => {
@@ -559,26 +547,18 @@
     const name = $("#dbName").value.trim();
     const connStr = $("#dbConnStr").value.trim();
     if (!name || !connStr) return;
-    let res;
     try {
-      res = await fetch("/api/v1/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch("/api/v1/connect", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, connection_string: connStr }),
       });
       const d = await res.json();
       if (d.error) { alert(d.error); return; }
-      if (!res.ok) { alert("Error: " + (d.error || res.status)); return; }
       document.getElementById("dbModal").classList.remove("show");
       await populateActiveConn();
-      const sel = document.getElementById("activeConn");
-      sel.value = name;
+      document.getElementById("activeConn").value = name;
       fetchData();
-    } catch (e) {
-      if (e instanceof SyntaxError && res) {
-        try { const t = await res.text(); alert("Server returned: status=" + res.status + "\n\n" + t.slice(0, 300)); } catch (_) { alert("Connection failed: " + e.message); }
-      } else { alert("Connection failed: " + e.message); }
-    }
+    } catch (e) { alert("Connection failed: " + e.message); }
   });
 
   // ─── Data Explorer ───
@@ -605,8 +585,10 @@
       renderPagination("explorerPagination", d.pages, d.page, (p) => { explorerPage = p; loadExplorer(); });
     } catch (e) { console.error(e); }
   }
-  $("#explorerConn").addEventListener("change", loadExplorerTables);
-  $("#explorerLoad").addEventListener("click", loadExplorer);
+  $("#explorerConn").addEventListener("change", () => { explorerPage = 1; loadExplorerTables(); });
+  $("#explorerTable").addEventListener("change", () => { explorerPage = 1; loadExplorer(); });
+  $("#explorerLoad").addEventListener("click", () => { explorerPage = 1; loadExplorer(); });
+  $("#explorerSearch").addEventListener("keypress", (e) => { if (e.key === "Enter") { explorerPage = 1; loadExplorer(); } });
   $("#explorerExport").addEventListener("click", () => {
     const conn = document.getElementById("explorerConn").value;
     const table = document.getElementById("explorerTable").value;
@@ -644,7 +626,8 @@
     });
   }
 
-  // ─── SQL Query ───
+  // ─── SQL Query with CodeMirror ───
+  let sqlCodeMirror = null;
   async function loadConnections() {
     try {
       const res = await fetch("/api/v1/connections");
@@ -654,16 +637,33 @@
       names.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); });
     } catch (e) { console.error(e); }
   }
+
+  function initCodeMirror() {
+    const textarea = document.getElementById("sqlEditor");
+    if (!textarea || !window.CodeMirror) return;
+    const theme = getTheme() === "light" ? "material-darker" : "dracula";
+    sqlCodeMirror = CodeMirror.fromTextArea(textarea, {
+      mode: "text/x-sql",
+      theme: theme,
+      lineNumbers: true,
+      indentWithTabs: false,
+      smartIndent: true,
+      tabSize: 2,
+      autofocus: true,
+      lineWrapping: true,
+      extraKeys: { "Ctrl-Enter": function() { document.getElementById("sqlRunBtn").click(); } },
+    });
+  }
+
   $("#sqlRunBtn").addEventListener("click", async () => {
     const conn = document.getElementById("sqlConnection").value;
-    const sql = document.getElementById("sqlEditor").value.trim();
+    const sql = sqlCodeMirror ? sqlCodeMirror.getValue().trim() : document.getElementById("sqlEditor").value.trim();
     if (!sql) return;
     const el = document.getElementById("sqlResult");
     el.innerHTML = "<p>Running...</p>";
     try {
       const res = await fetch("/api/v1/custom-query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ connection: conn, sql }),
       });
       const d = await res.json();
@@ -671,15 +671,17 @@
       renderTable("sqlResult", d.columns, d.rows || []);
     } catch (e) { el.innerHTML = "<p style='color:var(--red)'>Error: " + escapeHtml(e.message) + "</p>"; }
   });
-  $("#sqlClearBtn").addEventListener("click", () => { document.getElementById("sqlResult").innerHTML = ""; });
+  $("#sqlClearBtn").addEventListener("click", () => {
+    document.getElementById("sqlResult").innerHTML = "";
+    if (sqlCodeMirror) sqlCodeMirror.setValue("");
+  });
   $("#sqlExportBtn").addEventListener("click", async () => {
     const conn = document.getElementById("sqlConnection").value;
-    const sql = document.getElementById("sqlEditor").value.trim();
+    const sql = sqlCodeMirror ? sqlCodeMirror.getValue().trim() : document.getElementById("sqlEditor").value.trim();
     if (!sql) return;
     try {
       const res = await fetch("/api/v1/export-query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ connection: conn, sql }),
       });
       if (!res.ok) { const d = await res.json(); showError(d.error || "Export failed"); return; }
@@ -691,35 +693,306 @@
     } catch (e) { showError("Export failed: " + e.message); }
   });
 
-  // ─── Populate connection dropdown and load tables ───
-  async function initExplorer() {
+  // ─── Forecasting ───
+  $("#forecastRunBtn").addEventListener("click", async () => {
+    const conn = (document.getElementById("activeConn") || {}).value || "demo";
+    const periods = parseInt(document.getElementById("forecastPeriods").value) || 6;
+    const el = document.getElementById("forecastMetrics");
+    el.innerHTML = "<p style='color:var(--text-muted)'>Generating forecast...</p>";
     try {
-      const res = await fetch("/api/v1/connections");
-      const names = await res.json();
-      const sel = document.getElementById("explorerConn");
-      names.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); });
-      loadExplorerTables();
-    } catch (e) { console.error(e); }
+      const res = await fetch("/api/v1/forecast", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conn, periods }),
+      });
+      if (!res.ok) {
+        let msg = "Forecast failed (HTTP " + res.status + ")";
+        try { const err = await res.json(); if (err.error) msg = err.error; } catch (_) {}
+        el.innerHTML = "<p style='color:var(--red)'>" + escapeHtml(msg) + "</p>";
+        return;
+      }
+      const d = await res.json();
+      if (d.error) { el.innerHTML = "<p style='color:var(--red)'>" + escapeHtml(d.error) + "</p>"; return; }
+
+      if (d.metrics) {
+        el.innerHTML = '<div class="kpi-row">' +
+          '<div class="kpi-card kpi-blue"><span class="kpi-label">MAE</span><span class="kpi-value">' + d.metrics.mae + '</span></div>' +
+          '<div class="kpi-card kpi-green"><span class="kpi-label">RMSE</span><span class="kpi-value">' + d.metrics.rmse + '</span></div>' +
+          '<div class="kpi-card kpi-orange"><span class="kpi-label">AIC</span><span class="kpi-value">' + d.metrics.aic + '</span></div>' +
+          '</div>';
+      }
+
+      const hist = d.historical || [];
+      const fc = d.forecast || [];
+      const lower = d.lower_bound || [];
+      const upper = d.upper_bound || [];
+
+      const allDates = [...hist.map(h => h.date), ...fc.map(f => f.date)];
+      const histRevenue = hist.map(h => h.revenue);
+      const forecastValues = new Array(hist.length).fill(null).concat(fc.map(f => f.value));
+      const lowerValues = new Array(hist.length).fill(null).concat(lower.map(l => l.value));
+      const upperValues = new Array(hist.length).fill(null).concat(upper.map(u => u.value));
+
+      makeChart("chartForecast", {
+        type: "line",
+        data: {
+          labels: allDates,
+          datasets: [
+            { label: "Historical Revenue", data: histRevenue, borderColor: COLORS[0], backgroundColor: COLORS[0] + "22", fill: false, tension: .3 },
+            { label: "Forecast", data: forecastValues, borderColor: COLORS[2], borderDash: [5, 5], fill: false, tension: .3 },
+            { label: "Upper Bound", data: upperValues, borderColor: COLORS[1] + "44", backgroundColor: COLORS[1] + "11", fill: "+1", tension: .3, pointRadius: 0 },
+            { label: "Lower Bound", data: lowerValues, borderColor: COLORS[1] + "44", fill: false, tension: .3, pointRadius: 0 },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: { title: { display: true, text: "Revenue Forecast (" + periods + " months)" } },
+          scales: {
+            x: { title: { display: true, text: "Date" } },
+            y: { title: { display: true, text: "Revenue (UGX)" } },
+          },
+        },
+      });
+    } catch (e) {
+      el.innerHTML = "<p style='color:var(--red)'>Forecast failed: " + escapeHtml(e.message) + "</p>";
+    }
+  });
+
+  // ─── Anomaly Detection ───
+  $("#anomalyRunBtn").addEventListener("click", async () => {
+    const conn = (document.getElementById("activeConn") || {}).value || "demo";
+    const summaryEl = document.getElementById("anomalySummary");
+    const resultsEl = document.getElementById("anomalyResults");
+    summaryEl.innerHTML = "<p style='color:var(--text-muted)'>Analyzing data...</p>";
+    resultsEl.innerHTML = "";
+    try {
+      const res = await fetch("/api/v1/anomalies", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conn }),
+      });
+      const d = await res.json();
+      if (d.error) { summaryEl.innerHTML = "<p style='color:var(--red)'>" + escapeHtml(d.error) + "</p>"; return; }
+
+      const rev = d.revenue || {};
+      const s = rev.summary || {};
+      summaryEl.innerHTML = '<div class="kpi-row">' +
+        '<div class="kpi-card kpi-blue"><span class="kpi-label">Mean Revenue</span><span class="kpi-value">UGX ' + formatNum(s.mean) + '</span></div>' +
+        '<div class="kpi-card kpi-green"><span class="kpi-label">Std Dev</span><span class="kpi-value">UGX ' + formatNum(s.std) + '</span></div>' +
+        '<div class="kpi-card kpi-orange"><span class="kpi-label">Trend</span><span class="kpi-value">' + (s.trend || "N/A") + '</span></div>' +
+        '<div class="kpi-card kpi-purple"><span class="kpi-label">Anomalies</span><span class="kpi-value">' + (s.anomaly_count || 0) + ' (' + (s.anomaly_pct || 0) + '%)</span></div>' +
+        '</div>';
+
+      const anomalies = rev.anomalies || [];
+      if (anomalies.length === 0) {
+        resultsEl.innerHTML = '<div class="card" style="margin-top:1rem"><p style="color:var(--text-muted)">No anomalies detected in the data.</p></div>';
+      } else {
+        let html = '<div class="card" style="margin-top:1rem"><h3>Detected Anomalies</h3><table><thead><tr><th>Date</th><th>Value</th><th>Z-Score</th><th>Type</th><th>Deviation</th></tr></thead><tbody>';
+        anomalies.forEach(a => {
+          const typeClass = a.type === "spike" ? "color:var(--green)" : "color:var(--red)";
+          html += '<tr><td>' + a.date + '</td><td>UGX ' + formatNum(a.value) + '</td><td>' + a.z_score + '</td><td style="' + typeClass + ';font-weight:600">' + a.type + '</td><td>' + a.deviation_pct + '%</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        resultsEl.innerHTML = html;
+      }
+    } catch (e) {
+      summaryEl.innerHTML = "<p style='color:var(--red)'>Anomaly detection failed: " + escapeHtml(e.message) + "</p>";
+    }
+  });
+
+  // ─── NL Query ───
+  $("#nlQueryRunBtn").addEventListener("click", async () => {
+    const query = document.getElementById("nlQueryInput").value.trim();
+    if (!query) return;
+    const el = document.getElementById("nlQueryResult");
+    el.innerHTML = "<p style='color:var(--text-muted)'>Processing...</p>";
+    try {
+      const res = await fetch("/api/v1/nl-query", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const d = await res.json();
+      if (d.error) { el.innerHTML = "<p style='color:var(--red)'>" + escapeHtml(d.error) + "</p>"; return; }
+
+      let html = '<div class="card" style="margin-top:.5rem">';
+      html += '<p style="color:var(--text-muted);font-size:.85rem"><strong>Intent:</strong> ' + escapeHtml(d.intent || "unknown") + '</p>';
+      html += '<p style="color:var(--text-muted);font-size:.85rem"><strong>SQL:</strong> <code style="background:var(--surface-2);padding:.2rem .4rem;border-radius:4px">' + escapeHtml(d.sql || "") + '</code></p>';
+      if (d.explanation) html += '<p style="color:var(--text-muted);font-size:.85rem;margin-top:.5rem">' + escapeHtml(d.explanation) + '</p>';
+      if (d.columns && d.rows) {
+        html += '<div style="margin-top:.5rem;overflow:auto;max-height:300px">';
+        html += '<table><thead><tr>';
+        d.columns.forEach(c => { html += '<th>' + escapeHtml(c) + '</th>'; });
+        html += '</tr></thead><tbody>';
+        d.rows.forEach(r => {
+          html += '<tr>';
+          d.columns.forEach(c => { html += '<td>' + escapeHtml(r[c] != null ? r[c] : "") + '</td>'; });
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    } catch (e) {
+      el.innerHTML = "<p style='color:var(--red)'>Query failed: " + escapeHtml(e.message) + "</p>";
+    }
+  });
+  $("#nlQueryInput").addEventListener("keypress", (e) => {
+    if (e.key === "Enter") $("#nlQueryRunBtn").click();
+  });
+
+  // ─── Export PDF / Excel ───
+  $("#exportPdfBtn").addEventListener("click", async () => {
+    const conn = (document.getElementById("activeConn") || {}).value || "demo";
+    try {
+      const res = await fetch("/api/v1/report/pdf", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conn }),
+      });
+      if (!res.ok) { const d = await res.json(); showError(d.error || "PDF export failed"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "bi_report_" + conn + ".pdf"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { showError("PDF export failed: " + e.message); }
+  });
+
+  $("#exportExcelBtn").addEventListener("click", async () => {
+    const conn = (document.getElementById("activeConn") || {}).value || "demo";
+    try {
+      const res = await fetch("/api/v1/report/excel", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conn }),
+      });
+      if (!res.ok) { const d = await res.json(); showError(d.error || "Excel export failed"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "bi_report_" + conn + ".xlsx"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { showError("Excel export failed: " + e.message); }
+  });
+
+  // ─── Saved Views ───
+  $("#saveViewBtn").addEventListener("click", () => {
+    document.getElementById("viewName").value = "";
+    document.getElementById("saveViewModal").classList.add("show");
+  });
+
+  $("#saveViewConfirm").addEventListener("click", async () => {
+    const name = document.getElementById("viewName").value.trim();
+    if (!name) return;
+    const activeSection = document.querySelector(".nav-link.active")?.dataset.section || "overview";
+    const filters = {
+      region: document.getElementById("regionFilter").value,
+      category: document.getElementById("categoryFilter").value,
+      segment: document.getElementById("segmentFilter").value,
+      date_start: document.getElementById("dateStart").value,
+      date_end: document.getElementById("dateEnd").value,
+      conn: (document.getElementById("activeConn") || {}).value || "demo",
+    };
+    try {
+      const res = await fetch("/api/v1/views", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, view_type: "filter", filters, section: activeSection, connection: filters.conn }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showError(err.error || "Failed to save view (HTTP " + res.status + ")");
+        return;
+      }
+      document.getElementById("saveViewModal").classList.remove("show");
+    } catch (e) { showError("Failed to save view: " + e.message); }
+  });
+
+  $("#loadViewsBtn").addEventListener("click", async () => {
+    const listEl = document.getElementById("savedViewsList");
+    listEl.innerHTML = "<p style='color:var(--text-muted)'>Loading...</p>";
+    document.getElementById("loadViewsModal").classList.add("show");
+    try {
+      const res = await fetch("/api/v1/views");
+      if (!res.ok) { listEl.innerHTML = "<p style='color:var(--red)'>Failed to load views</p>"; return; }
+      const views = await res.json();
+      if (!Array.isArray(views) || views.length === 0) {
+        listEl.innerHTML = "<p style='color:var(--text-muted)'>No saved views yet.</p>";
+        return;
+      }
+      listEl.innerHTML = views.map(v =>
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.4rem">' +
+          '<div><strong>' + escapeHtml(v.name) + '</strong><br><span style="font-size:.8rem;color:var(--text-muted)">' + escapeHtml(v.section || "overview") + ' | ' + escapeHtml(v.connection || "demo") + '</span></div>' +
+          '<div class="btn-group">' +
+            '<button class="btn btn-sm btn-accent" onclick="window._loadView(' + v.id + ')">Load</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="window._deleteView(' + v.id + ')">Delete</button>' +
+          '</div>' +
+        '</div>'
+      ).join("");
+    } catch (e) { listEl.innerHTML = "<p style='color:var(--red)'>Failed to load views</p>"; }
+  });
+
+  const VALID_SECTIONS = new Set(["overview","revenue","products","website","customers","data-explorer","sql-query","forecasting","anomalies","admin","nl-query"]);
+
+  window._loadView = async function(viewId) {
+    try {
+      const res = await fetch("/api/v1/views/" + viewId);
+      if (!res.ok) {
+        showError("View not found or failed to load");
+        return;
+      }
+      const view = await res.json();
+      if (view.error) { showError(view.error); return; }
+      if (view.filters) {
+        const f = view.filters;
+        if (f.region != null) document.getElementById("regionFilter").value = f.region;
+        if (f.category != null) document.getElementById("categoryFilter").value = f.category;
+        if (f.segment != null) document.getElementById("segmentFilter").value = f.segment;
+        if (f.date_start != null) document.getElementById("dateStart").value = f.date_start;
+        if (f.date_end != null) document.getElementById("dateEnd").value = f.date_end;
+        if (f.conn && document.getElementById("activeConn")) {
+          document.getElementById("activeConn").value = f.conn;
+        }
+      }
+      if (view.section && VALID_SECTIONS.has(view.section)) {
+        const navLink = document.querySelector('.nav-link[data-section="' + CSS.escape(view.section) + '"]');
+        if (navLink && !navLink.classList.contains("active")) navLink.click();
+      }
+      document.getElementById("loadViewsModal").classList.remove("show");
+      applyFilters();
+    } catch (e) { showError("Failed to load view: " + e.message); }
+  };
+
+  window._deleteView = async function(viewId) {
+    if (!confirm("Delete this view?")) return;
+    try {
+      const res = await fetch("/api/v1/views/" + viewId, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showError(err.error || "Failed to delete view");
+        return;
+      }
+      $("#loadViewsBtn").click();
+    } catch (e) { showError("Failed to delete view: " + e.message); }
+  };
+
+  // ─── Dashboard Widget Drag-and-Drop ───
+  function initSortableGrids() {
+    if (!window.Sortable) return;
+    document.querySelectorAll(".widget-grid").forEach(grid => {
+      Sortable.create(grid, {
+        animation: 150,
+        ghostClass: "sortable-ghost",
+        dragClass: "sortable-drag",
+        handle: ".card",
+      });
+    });
   }
 
-  // ─── WebSocket real-time ───
+  // ─── WebSocket ───
   const socket = io();
   socket.on("connect", () => {
     const el = document.getElementById("connStatus");
-    el.textContent = "";
-    const dot = document.createElement("span");
-    dot.className = "status-dot";
-    el.appendChild(dot);
-    el.appendChild(document.createTextNode(" Real-time connected"));
+    el.innerHTML = '<span class="status-dot"></span> Real-time connected';
   });
   socket.on("disconnect", () => {
     const el = document.getElementById("connStatus");
-    el.textContent = "";
-    const dot = document.createElement("span");
-    dot.className = "status-dot";
-    dot.style.background = "var(--red)";
-    el.appendChild(dot);
-    el.appendChild(document.createTextNode(" Disconnected"));
+    el.innerHTML = '<span class="status-dot" style="background:var(--red)"></span> Disconnected';
   });
   socket.on("dashboard_update", (d) => {
     renderAll(d);
@@ -730,6 +1003,36 @@
     if (anyFilterActive && filteredKpis) {
       renderKpis("kpiRow", filteredKpis);
     }
+  });
+
+  // ─── Online users (collaborative) ───
+  socket.on("online_users", (users) => {
+    const el = document.getElementById("onlineUsers");
+    if (!el) return;
+    if (!users || users.length <= 1) { el.innerHTML = ""; return; }
+    el.innerHTML = '<span style="font-size:.75rem;color:var(--text-muted);margin-top:.3rem;display:block">' + users.length + ' users online</span>';
+  });
+
+  socket.on("cursor_update", (data) => {
+    if (!data || !data.cursor) return;
+    const container = document.getElementById("cursorContainer");
+    let cursor = document.getElementById("cursor-" + data.username);
+    if (!cursor) {
+      cursor = document.createElement("div");
+      cursor.id = "cursor-" + data.username;
+      cursor.style.cssText = "position:fixed;pointer-events:none;transition:all .1s;z-index:10000;";
+      cursor.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 3l14 9-7 2-3 7z" fill="currentColor"/></svg><span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px;margin-left:4px">' + escapeHtml(data.username) + '</span>';
+      container.appendChild(cursor);
+    }
+    cursor.style.left = data.cursor.x + "px";
+    cursor.style.top = data.cursor.y + "px";
+    cursor.style.color = COLORS[Math.abs(data.username.charCodeAt(0)) % COLORS.length];
+    clearTimeout(cursor._timeout);
+    cursor._timeout = setTimeout(() => { cursor.remove(); }, 3000);
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    socket.emit("cursor_move", { x: e.clientX, y: e.clientY });
   });
 
   // ─── Populate active connection dropdown ───
@@ -752,7 +1055,9 @@
   (async function init() {
     await populateActiveConn();
     await fetchData();
-    initExplorer();
+    loadExplorerTables();
     loadConnections();
+    initCodeMirror();
+    initSortableGrids();
   })();
 })();

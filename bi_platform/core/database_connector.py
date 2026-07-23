@@ -171,6 +171,8 @@ class DatabaseConnector:
 
     def sql_monthly_trends(self, conn_name: str, table: str = "sales") -> list[dict]:
         """Monthly revenue/profit trends computed in SQL."""
+        if not table.isidentifier():
+            raise ValueError(f"Invalid table name: {table}")
         engine = self._engines[conn_name]
         sql = text(f"""
             SELECT

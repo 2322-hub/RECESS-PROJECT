@@ -1,14 +1,14 @@
 import json
 import re
 import time
-from io import BytesIO
 
 import pandas as pd
 from flask import Blueprint, Response, jsonify, redirect, render_template, request, session
-from flask_socketio import disconnect
+from flask_socketio import disconnect, emit
 
 from . import limiter, logger, socketio
 from .auth import login_required
+from .cache import CacheLayer
 from .config import Config
 from .core.analytics_engine import AnalyticsEngine
 from .core.database_connector import DatabaseConnector
@@ -23,49 +23,6 @@ def _json_response(data, status=200):
     )
 
 
-def _get_dashboard_payload(conn: str) -> dict:
-    """Build the same dashboard payload used by the UI for report exports."""
-    if _use_sql_mode(conn):
-        payload = analytics.build_dashboard_payload_sql(db_connector, conn)
-        payload["_conn"] = conn
-        payload["_mode"] = "sql"
-        payload["_sales_rows"] = _row_count_cache.get(f"{conn}:sales", 0)
-        return payload
-
-    sales, customers, website = _load_dashboard_data(conn)
-    payload = analytics.build_dashboard_payload(sales, customers, website)
-    payload["_conn"] = conn
-    payload["_mode"] = "dataframe"
-    payload["_sales_rows"] = len(sales)
-    return payload
-
-
-def _build_report_dataframe(payload: dict) -> pd.DataFrame:
-    rows = []
-    kpis = payload.get("kpis", {}) or {}
-    rows.extend(
-        [
-            {"section": "Metadata", "metric": "Connection", "value": payload.get("_conn", "demo")},
-            {"section": "Metadata", "metric": "Mode", "value": payload.get("_mode", "dataframe")},
-            {"section": "Metadata", "metric": "Sales Rows", "value": payload.get("_sales_rows", 0)},
-            {"section": "KPI", "metric": "Total Revenue", "value": kpis.get("total_revenue")},
-            {"section": "KPI", "metric": "Total Profit", "value": kpis.get("total_profit")},
-            {"section": "KPI", "metric": "Profit Margin", "value": kpis.get("profit_margin")},
-            {"section": "KPI", "metric": "Total Cost", "value": kpis.get("total_cost")},
-            {"section": "KPI", "metric": "Record Count", "value": kpis.get("record_count")},
-        ]
-    )
-
-    for item in payload.get("revenue_breakdown", {}).get("region", []) or []:
-        rows.append({"section": "Revenue Breakdown", "metric": f"Region: {item.get('label', '')}", "value": item.get("value")})
-    for item in payload.get("revenue_breakdown", {}).get("product_category", []) or []:
-        rows.append({"section": "Revenue Breakdown", "metric": f"Category: {item.get('label', '')}", "value": item.get("value")})
-    for item in payload.get("revenue_breakdown", {}).get("customer_segment", []) or []:
-        rows.append({"section": "Revenue Breakdown", "metric": f"Segment: {item.get('label', '')}", "value": item.get("value")})
-
-    return pd.DataFrame(rows)
-
-
 bp = Blueprint("main", __name__)
 api_bp = Blueprint("api", __name__, url_prefix="/api/v1")
 
@@ -74,7 +31,6 @@ analytics = AnalyticsEngine()
 
 db_connector.connect_demo_sqlite()
 
-# Auto-connect MySQL/external DB from DATABASE_URL if configured
 _default_conn = "demo"
 _db_url = Config.SQLALCHEMY_DATABASE_URI
 if _db_url and not _db_url.startswith("sqlite"):
@@ -85,9 +41,9 @@ if _db_url and not _db_url.startswith("sqlite"):
         logger.warning("Could not auto-connect DATABASE_URL: %s", _e)
 
 _df_cache: dict[str, pd.DataFrame] = {}
-_active_conn: dict[str, str] = {}  # session_id -> connection name
-_row_count_cache: dict[str, int] = {}  # conn -> row count
-_data_dirty: bool = True  # flag for realtime loop to push updates
+_active_conn: dict[str, str] = {}
+_row_count_cache: dict[str, int] = {}
+_data_dirty: bool = True
 
 _TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _DANGEROUS_SQL_RE = re.compile(
@@ -107,9 +63,11 @@ _COLUMN_MAP = {
     "customer_segment": ("customer_segment", "segment", "customer_type", "client_type"),
 }
 
+# Online users for collaborative features
+_online_users: dict[str, dict] = {}
+
 
 def _normalize_columns(df: pd.DataFrame, table_type: str = "sales") -> pd.DataFrame:
-    """Map real-DB column names to the schema expected by AnalyticsEngine."""
     if df.empty:
         return df
     df = df.copy()
@@ -154,7 +112,7 @@ def _get_cached(name: str, conn: str = "demo") -> pd.DataFrame:
     if not _TABLE_RE.match(name):
         raise ValueError(f"Invalid table name: {name}")
     if cache_key not in _df_cache:
-        _df_cache[cache_key] = db_connector.execute_query(conn, f"SELECT * FROM {name}")  # noqa: S608
+        _df_cache[cache_key] = db_connector.execute_query(conn, f"SELECT * FROM {name}")
     return _df_cache[cache_key].copy()
 
 
@@ -162,22 +120,16 @@ def _invalidate_cache():
     global _data_dirty
     _df_cache.clear()
     _data_dirty = True
+    CacheLayer.invalidate("*")
 
 
 def _use_sql_mode(conn: str) -> bool:
-    """Check if the connection should use SQL-only aggregation (no full DataFrame load).
-
-    Always returns True for non-SQLite connections (PostgreSQL, MySQL, etc.)
-    to avoid loading millions of rows into memory.
-    For SQLite demo, checks if sales table exceeds MAX_ROWS_IN_MEMORY.
-    """
     if conn == "demo":
         cache_key = f"{conn}:sales"
         if cache_key in _row_count_cache:
             return _row_count_cache[cache_key] > Config.MAX_ROWS_IN_MEMORY
         try:
             from sqlalchemy import text
-
             engine = db_connector._engines.get(conn)
             if engine is None:
                 return False
@@ -191,23 +143,34 @@ def _use_sql_mode(conn: str) -> bool:
 
 
 # ------------------------------------------------------------------
-# Page routes (unchanged)
+# Role-based access helper
 # ------------------------------------------------------------------
+_ROLE_SECTIONS = {
+    "admin": {"overview", "revenue", "products", "website", "customers", "data-explorer", "sql-query", "forecasting", "anomalies", "admin"},
+    "viewer": {"overview", "revenue", "products", "website", "customers"},
+}
+
+
 @bp.route("/")
 @login_required
 def index():
     tables = db_connector.list_tables(_default_conn)
-    return render_template("dashboard.html", tables=tables, default_conn=_default_conn)
+    role = session.get("role", "viewer")
+    allowed_sections = list(_ROLE_SECTIONS.get(role, _ROLE_SECTIONS["viewer"]))
+    return render_template(
+        "dashboard.html",
+        tables=tables,
+        default_conn=_default_conn,
+        user_role=role,
+        allowed_sections=allowed_sections,
+        user=session.get("user", ""),
+    )
 
 
 # ------------------------------------------------------------------
 # API v1 routes
 # ------------------------------------------------------------------
 def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load sales, customers, and website DataFrames for a given connection.
-
-    Raises on failure so the caller can return an appropriate error response.
-    """
     if conn == "demo":
         return _get_cached("sales"), _get_cached("customers"), _get_cached("website_analytics")
 
@@ -222,15 +185,10 @@ def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         products_df = db_connector.execute_query(conn, "SELECT * FROM products")
         sales = db_connector.execute_query(conn, "SELECT * FROM sales")
         sales = sales.merge(products_df, left_on="product_id", right_on="id", suffixes=("", "_prod"))
-        sales = sales.rename(
-            columns={
-                "sale_date": "date",
-                "total": "total_revenue",
-                "price": "unit_price",
-                "category": "product_category",
-                "name": "product_name",
-            }
-        )
+        sales = sales.rename(columns={
+            "sale_date": "date", "total": "total_revenue", "price": "unit_price",
+            "category": "product_category", "name": "product_name",
+        })
         sales["cost"] = 0.0
         sales["profit"] = sales["total_revenue"].astype(float)
         sales["region"] = "All"
@@ -241,7 +199,7 @@ def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         sales = _normalize_columns(sales, "sales")
     else:
         for tbl in tables:
-            raw = db_connector.execute_query(conn, f"SELECT * FROM {tbl}")  # noqa: S608
+            raw = db_connector.execute_query(conn, f"SELECT * FROM {tbl}")
             if not raw.empty:
                 sales = _normalize_columns(raw, "sales")
                 break
@@ -252,14 +210,7 @@ def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
     if "website_analytics" in tables:
         website = db_connector.execute_query(conn, "SELECT * FROM website_analytics")
 
-    logger.info(
-        "Loaded '%s': sales=%d rows, customers=%d rows, website=%d rows, sales_cols=%s",
-        conn,
-        len(sales),
-        len(customers),
-        len(website),
-        list(sales.columns) if not sales.empty else [],
-    )
+    logger.info("Loaded '%s': sales=%d, customers=%d, website=%d", conn, len(sales), len(customers), len(website))
     return sales, customers, website
 
 
@@ -270,12 +221,36 @@ def api_dashboard_data():
     conn = request.args.get("conn", "demo")
     _active_conn[session.get("user", "anonymous")] = conn
 
+    cache_key = f"dashboard:{conn}"
+    cached = CacheLayer.get(cache_key)
+    if cached:
+        cached["_conn"] = conn
+        return _json_response(cached)
+
+    if _use_sql_mode(conn):
+        try:
+            payload = analytics.build_dashboard_payload_sql(db_connector, conn)
+            payload["_conn"] = conn
+            payload["_mode"] = "sql"
+            cache_key_count = f"{conn}:sales"
+            payload["_sales_rows"] = _row_count_cache.get(cache_key_count, 0)
+            CacheLayer.set(cache_key, payload, ttl=30)
+            return _json_response(payload)
+        except Exception as e:
+            logger.error("SQL dashboard error for '%s': %s", conn, e, exc_info=True)
+            return jsonify({"error": str(e), "conn": conn}), 400
+
     try:
-        payload = _get_dashboard_payload(conn)
-        return _json_response(payload)
+        sales, customers, website = _load_dashboard_data(conn)
     except Exception as e:
         logger.error("Dashboard data error for '%s': %s", conn, e, exc_info=True)
         return jsonify({"error": str(e), "conn": conn}), 400
+    payload = analytics.build_dashboard_payload(sales, customers, website)
+    payload["_conn"] = conn
+    payload["_mode"] = "dataframe"
+    payload["_sales_rows"] = len(sales)
+    CacheLayer.set(cache_key, payload, ttl=30)
+    return _json_response(payload)
 
 
 @api_bp.route("/tables")
@@ -313,14 +288,12 @@ def api_custom_query():
     try:
         df = db_connector.execute_query(conn, sql)
         limited = df.head(Config.SQL_MAX_ROWS)
-        return _json_response(
-            {
-                "columns": list(limited.columns),
-                "rows": limited.to_dict(orient="records"),
-                "row_count": len(df),
-                "truncated": len(df) > Config.SQL_MAX_ROWS,
-            }
-        )
+        return _json_response({
+            "columns": list(limited.columns),
+            "rows": limited.to_dict(orient="records"),
+            "row_count": len(df),
+            "truncated": len(df) > Config.SQL_MAX_ROWS,
+        })
     except Exception:
         logger.warning("Query failed")
         return jsonify({"error": "Query execution failed"}), 400
@@ -340,11 +313,12 @@ def api_table_data(table_name: str):
         df = _get_cached(table_name)
     else:
         try:
-            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")  # noqa: S608
+            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
     if search:
-        mask = df.apply(lambda col: col.astype(str).str.contains(search, case=False, na=False)).any(axis=1)
+        escaped = re.escape(search)
+        mask = df.apply(lambda col: col.astype(str).str.contains(escaped, case=False, na=False)).any(axis=1)
         df = df[mask]
     if sort:
         desc = sort.startswith("-")
@@ -353,23 +327,23 @@ def api_table_data(table_name: str):
             df = df.sort_values(col, ascending=not desc)
     total = len(df)
     start = (page - 1) * per_page
-    chunk = df.iloc[start : start + per_page]
-    return _json_response(
-        {
-            "columns": list(chunk.columns),
-            "rows": chunk.to_dict(orient="records"),
-            "total": total,
-            "page": page,
-            "per_page": per_page,
-            "pages": (total + per_page - 1) // per_page,
-        }
-    )
+    chunk = df.iloc[start: start + per_page]
+    return _json_response({
+        "columns": list(chunk.columns),
+        "rows": chunk.to_dict(orient="records"),
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    })
 
 
 @api_bp.route("/connect", methods=["POST"])
 @login_required
 @limiter.limit("5/minute")
 def api_connect_db():
+    if session.get("role") != "admin":
+        return jsonify({"error": "Admin access required"}), 403
     data = request.get_json(force=True)
     name = data.get("name", "")
     conn_str = data.get("connection_string", "")
@@ -422,8 +396,6 @@ def api_custom_query2():
         return jsonify({"error": "SQL query required"}), 400
     if _DANGEROUS_SQL_RE.search(sql):
         return jsonify({"error": "Only SELECT queries are allowed"}), 403
-    from .config import Config
-
     if Config.SQL_READ_ONLY and not sql.strip().upper().startswith("SELECT"):
         return jsonify({"error": "Only SELECT queries are allowed in read-only mode"}), 403
     try:
@@ -450,7 +422,7 @@ def api_filter():
         df = _get_cached(table)
     else:
         try:
-            df = db_connector.execute_query(conn, f"SELECT * FROM {table}")  # noqa: S608
+            df = db_connector.execute_query(conn, f"SELECT * FROM {table}")
             df = _normalize_columns(df, "sales")
         except (ValueError, KeyError):
             df = _get_cached(table, "demo")
@@ -480,7 +452,7 @@ def api_export_csv(table_name: str):
         if conn == "demo":
             df = _get_cached(table_name)
         else:
-            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")  # noqa: S608
+            df = db_connector.execute_query(conn, f"SELECT * FROM {table_name}")
             df = _normalize_columns(df, table_name)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -515,63 +487,194 @@ def api_export_query_csv():
     )
 
 
-@api_bp.route("/report/export/csv")
+# ------------------------------------------------------------------
+# NEW: Forecasting API
+# ------------------------------------------------------------------
+@api_bp.route("/forecast", methods=["POST"])
 @login_required
-def api_report_export_csv():
-    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
+@limiter.limit("10/minute")
+def api_forecast():
+    from .analytics.forecasting import ForecastEngine
+
+    data = request.get_json(force=True)
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+
+    conn = data.get("conn", "demo")
+    if not isinstance(conn, str) or not conn.strip():
+        conn = "demo"
+
     try:
-        payload = _get_dashboard_payload(conn)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    csv_data = _build_report_dataframe(payload).to_csv(index=False)
-    return Response(
-        csv_data,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=report_export.csv"},
-    )
+        periods = int(data.get("periods", 6))
+    except (TypeError, ValueError):
+        periods = 6
+    periods = max(1, min(periods, 24))
 
+    cache_key = f"forecast:{conn}:{periods}"
+    cached = CacheLayer.get(cache_key)
+    if cached:
+        return _json_response(cached)
 
-@api_bp.route("/report/export/excel")
-@login_required
-def api_report_export_excel():
-    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
     try:
-        payload = _get_dashboard_payload(conn)
+        if _use_sql_mode(conn):
+            monthly = db_connector.sql_monthly_trends(conn)
+        else:
+            sales, _, _ = _load_dashboard_data(conn)
+            monthly = analytics.monthly_trends(sales)
+
+        result = ForecastEngine.forecast_revenue(monthly, periods)
+        CacheLayer.set(cache_key, result, ttl=120)
+        return _json_response(result)
     except Exception as e:
+        logger.error("Forecast error: %s", e, exc_info=True)
         return jsonify({"error": str(e)}), 400
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        _build_report_dataframe(payload).to_excel(writer, sheet_name="Report", index=False)
-    output.seek(0)
-    return Response(
-        output.getvalue(),
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=report_export.xlsx"},
-    )
-
-
-@api_bp.route("/report/export/pdf")
-@login_required
-def api_report_export_pdf():
-    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
-    return redirect(f"/api/v1/report/preview?conn={conn}&print=1")
-
-
-@api_bp.route("/report/preview")
-@login_required
-def api_report_preview():
-    conn = request.args.get("conn", _active_conn.get(session.get("user", "anonymous"), "demo"))
-    print_mode = request.args.get("print", "0") == "1"
-    try:
-        payload = _get_dashboard_payload(conn)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    report_rows = _build_report_dataframe(payload).to_dict(orient="records")
-    return render_template("report_preview.html", report_rows=report_rows, conn=conn, print_mode=print_mode)
 
 
 # ------------------------------------------------------------------
-# Backward-compat redirects (old /api/ paths -> /api/v1/)
+# NEW: Anomaly Detection API
+# ------------------------------------------------------------------
+@api_bp.route("/anomalies", methods=["POST"])
+@login_required
+@limiter.limit("10/minute")
+def api_anomalies():
+    from .analytics.anomaly import AnomalyDetector
+
+    data = request.get_json(force=True)
+    conn = data.get("conn", "demo")
+
+    cache_key = f"anomalies:{conn}"
+    cached = CacheLayer.get(cache_key)
+    if cached:
+        return _json_response(cached)
+
+    try:
+        if _use_sql_mode(conn):
+            monthly = db_connector.sql_monthly_trends(conn)
+        else:
+            sales, _, _ = _load_dashboard_data(conn)
+            monthly = analytics.monthly_trends(sales)
+
+        revenue_anomalies = AnomalyDetector.detect_revenue_anomalies(monthly)
+
+        website_anomalies = {}
+        try:
+            if _use_sql_mode(conn):
+                wa = db_connector.sql_website_summary(conn)
+                daily_trend = wa.get("daily_trend", [])
+            else:
+                _, _, website = _load_dashboard_data(conn)
+                wa_summary = analytics.website_summary(website)
+                daily_trend = wa_summary.get("daily_trend", [])
+            website_anomalies = AnomalyDetector.detect_website_anomalies(daily_trend)
+        except Exception:
+            pass
+
+        result = {
+            "revenue": revenue_anomalies,
+            "website": website_anomalies,
+        }
+        CacheLayer.set(cache_key, result, ttl=120)
+        return _json_response(result)
+    except Exception as e:
+        logger.error("Anomaly detection error: %s", e, exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+# ------------------------------------------------------------------
+# NEW: Report Generation API
+# ------------------------------------------------------------------
+@api_bp.route("/report/<fmt>", methods=["POST"])
+@login_required
+@limiter.limit("5/minute")
+def api_generate_report(fmt: str):
+    if fmt not in ("pdf", "excel"):
+        return jsonify({"error": "Format must be 'pdf' or 'excel'"}), 400
+
+    data = request.get_json(force=True) if request.is_json else {}
+    conn = data.get("conn", "demo")
+
+    cache_key = f"dashboard:{conn}"
+    dashboard_data = CacheLayer.get(cache_key)
+    if not dashboard_data:
+        try:
+            if _use_sql_mode(conn):
+                dashboard_data = analytics.build_dashboard_payload_sql(db_connector, conn)
+            else:
+                sales, customers, website = _load_dashboard_data(conn)
+                dashboard_data = analytics.build_dashboard_payload(sales, customers, website)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
+    try:
+        if fmt == "pdf":
+            from .reports.pdf_report import PDFReportGenerator
+            pdf_bytes = PDFReportGenerator.generate(dashboard_data)
+            return Response(
+                pdf_bytes,
+                mimetype="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename=bi_report_{conn}.pdf"},
+            )
+        else:
+            from .reports.excel_report import ExcelReportGenerator
+            excel_bytes = ExcelReportGenerator.generate(dashboard_data)
+            return Response(
+                excel_bytes,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename=bi_report_{conn}.xlsx"},
+            )
+    except Exception as e:
+        logger.error("Report generation error: %s", e, exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+# ------------------------------------------------------------------
+# NEW: Natural Language Query API
+# ------------------------------------------------------------------
+@api_bp.route("/nl-query", methods=["POST"])
+@login_required
+@limiter.limit("15/minute")
+def api_nl_query():
+    from .nl_query import NLQueryEngine
+
+    data = request.get_json(force=True)
+    query = data.get("query", "").strip()
+    conn = data.get("connection", "demo")
+
+    if not query:
+        return jsonify({"error": "Query required"}), 400
+
+    result = NLQueryEngine.nl_to_sql(query)
+
+    if result.get("error") and not result.get("sql"):
+        return jsonify(result), 400
+
+    if result.get("sql"):
+        try:
+            df = db_connector.execute_query(conn, result["sql"])
+            result["columns"] = list(df.columns)
+            result["rows"] = df.head(Config.SQL_MAX_ROWS).to_dict(orient="records")
+            result["row_count"] = len(df)
+        except Exception as e:
+            result["error"] = f"SQL execution failed: {e}"
+            return jsonify(result), 400
+
+    return jsonify(result)
+
+
+# ------------------------------------------------------------------
+# NEW: User role API (for frontend role-based rendering)
+# ------------------------------------------------------------------
+@api_bp.route("/user-role")
+@login_required
+def api_user_role():
+    return jsonify({
+        "username": session.get("user", ""),
+        "role": session.get("role", "viewer"),
+    })
+
+
+# ------------------------------------------------------------------
+# Backward-compat redirects
 # ------------------------------------------------------------------
 @bp.route("/api/<path:old_path>")
 @login_required
@@ -586,10 +689,9 @@ def api_redirect_post(old_path: str):
 
 
 # ------------------------------------------------------------------
-# WebSocket events for real-time updates
+# WebSocket events
 # ------------------------------------------------------------------
 def _ws_auth():
-    """Verify WebSocket client is authenticated."""
     if "user" not in session:
         disconnect()
         return False
@@ -599,8 +701,33 @@ def _ws_auth():
 @socketio.on("connect")
 def handle_connect():
     if not _ws_auth():
+        return False
+    username = session.get("user", "anonymous")
+    _online_users[username] = {
+        "username": username,
+        "role": session.get("role", "viewer"),
+        "cursor": None,
+    }
+    emit("online_users", list(_online_users.values()), broadcast=True)
+    logger.info("WebSocket client connected: %s", username)
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    username = session.get("user", "anonymous")
+    _online_users.pop(username, None)
+    emit("online_users", list(_online_users.values()), broadcast=True)
+    logger.info("WebSocket client disconnected: %s", username)
+
+
+@socketio.on("cursor_move")
+def handle_cursor_move(data):
+    if not _ws_auth():
         return
-    logger.info("WebSocket client connected")
+    username = session.get("user", "anonymous")
+    if username in _online_users:
+        _online_users[username]["cursor"] = data
+    emit("cursor_update", {"username": username, "cursor": data}, broadcast=True, include_self=False)
 
 
 @socketio.on("request_refresh")
@@ -610,7 +737,6 @@ def handle_refresh():
     conn = _active_conn.get(session.get("user", "anonymous"), "demo")
     _invalidate_cache()
 
-    # SQL-only mode for large datasets
     if _use_sql_mode(conn):
         try:
             payload = analytics.build_dashboard_payload_sql(db_connector, conn)
@@ -636,7 +762,6 @@ def handle_refresh():
 
 
 def start_realtime_loop():
-    """Push dashboard updates on a schedule (called from a background thread)."""
     global _data_dirty
     interval = Config.REALTIME_INTERVAL
     while True:
@@ -647,7 +772,6 @@ def start_realtime_loop():
         try:
             for user, conn in list(_active_conn.items()):
                 try:
-                    # SQL-only mode for large datasets
                     if _use_sql_mode(conn):
                         payload = analytics.build_dashboard_payload_sql(db_connector, conn)
                         payload["_conn"] = conn

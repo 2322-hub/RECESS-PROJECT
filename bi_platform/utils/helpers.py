@@ -46,12 +46,15 @@ def chunk_dataframe(df, chunk_size: int = 50_000):
 
 def safe_json_serialize(obj):
     """Make objects JSON-serialisable (handles numpy types)."""
+    import math
     from datetime import date, datetime
     from decimal import Decimal
 
     import numpy as np
     import pandas as pd
 
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
     if isinstance(obj, (date, datetime)):
         return obj.isoformat()
     if isinstance(obj, Decimal):
@@ -59,7 +62,8 @@ def safe_json_serialize(obj):
     if isinstance(obj, (np.integer,)):
         return int(obj)
     if isinstance(obj, (np.floating,)):
-        return float(obj)
+        v = float(obj)
+        return None if (math.isnan(v) or math.isinf(v)) else v
     if isinstance(obj, (np.ndarray,)):
         return obj.tolist()
     if isinstance(obj, (pd.Timestamp,)):

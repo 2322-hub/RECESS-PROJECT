@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BI Platform — Admin User Management</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #0f172a; --surface: #1e293b; --surface-2: #334155; --border: #475569; --text: #f1f5f9; --text-muted: #94a3b8; --accent: #3b82f6; --accent-hover: #2563eb; --green: #10b981; --red: #ef4444; --radius: 10px; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 2rem; min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { margin-bottom: .5rem; }
+    .subtitle { color: var(--text-muted); margin-bottom: 1.5rem; font-size: .9rem; }
+    .back-link { color: var(--accent); text-decoration: none; margin-bottom: 1rem; display: inline-block; font-size: .9rem; }
+    .back-link:hover { text-decoration: underline; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+    th, td { padding: .7rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--surface-2); font-weight: 600; font-size: .85rem; text-transform: uppercase; letter-spacing: .5px; }
+    td { font-size: .9rem; }
+    tr:hover td { background: rgba(59,130,246,.05); }
+    .badge { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .75rem; font-weight: 600; }
+    .badge-admin { background: rgba(139,92,246,.2); color: #a78bfa; }
+    .badge-viewer { background: rgba(59,130,246,.2); color: #60a5fa; }
+    .btn { padding: .4rem .8rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--text); cursor: pointer; font-size: .8rem; transition: background .15s; }
+    .btn:hover { background: var(--border); }
+    .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-accent:hover { background: var(--accent-hover); }
+    .btn-danger { background: var(--red); border-color: var(--red); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-group { display: flex; gap: .4rem; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 200; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; width: 90%; max-width: 440px; }
+    .modal h3 { margin-bottom: 1rem; }
+    .modal label { display: block; margin-bottom: .8rem; font-size: .85rem; color: var(--text-muted); }
+    .modal input, .modal select { display: block; width: 100%; margin-top: .3rem; padding: .5rem .7rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: .9rem; }
+    .modal-actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: 1.2rem; }
+    .actions-bar { display: flex; gap: .6rem; margin-bottom: 1rem; justify-content: space-between; align-items: center; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">&larr; Back to Dashboard</a>
+    <h1>User Management</h1>
+    <p class="subtitle">Manage user accounts and roles</p>
+
+    <div class="actions-bar">
+      <span id="userCount"></span>
+      <button class="btn btn-accent" onclick="openCreateModal()">+ Add User</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Username</th><th>Role</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="userTableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <h3 id="modalTitle">Edit User</h3>
+      <input type="hidden" id="editUserId" />
+      <label>Role
+        <select id="editRole"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+      </label>
+      <label>New Password (leave blank to keep current)
+        <input type="password" id="editPassword" placeholder="Leave blank to keep current" />
+      </label>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-accent" onclick="saveUser()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="createModal">
+    <div class="modal">
+      <h3>Create User</h3>
+      <label>Username
+        <input type="text" id="newUsername" placeholder="username" />
+      </label>
+      <label>Password
+        <input type="password" id="newPassword" placeholder="minimum 8 characters" />
+      </label>
+      <label>Role
+        <select id="newRole"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+      </label>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeCreateModal()">Cancel</button>
+        <button class="btn btn-accent" onclick="createUser()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadUsers() {
+      const res = await fetch('/admin/api/users');
+      const users = await res.json();
+      const tbody = document.getElementById('userTableBody');
+      document.getElementById('userCount').textContent = users.length + ' users';
+      tbody.innerHTML = users.map(u =>
+        '<tr><td>' + u.id + '</td><td>' + escapeHtml(u.username) + '</td>' +
+        '<td><span class="badge badge-' + u.role + '">' + u.role + '</span></td>' +
+        '<td class="btn-group">' +
+          '<button class="btn" onclick="openEditModal(' + u.id + ', \'' + u.role + '\')">Edit</button>' +
+          '<button class="btn btn-danger" onclick="deleteUser(' + u.id + ', \'' + escapeHtml(u.username) + '\')">Delete</button>' +
+        '</td></tr>'
+      ).join('');
+    }
+
+    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    function openEditModal(id, role) {
+      document.getElementById('editUserId').value = id;
+      document.getElementById('editRole').value = role;
+      document.getElementById('editPassword').value = '';
+      document.getElementById('editModal').classList.add('show');
+    }
+
+    function closeModal() { document.getElementById('editModal').classList.remove('show'); }
+
+    async function saveUser() {
+      const id = document.getElementById('editUserId').value;
+      const body = { role: document.getElementById('editRole').value };
+      const pw = document.getElementById('editPassword').value;
+      if (pw) body.password = pw;
+      await fetch('/admin/api/users/' + id, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+      });
+      closeModal();
+      loadUsers();
+    }
+
+    async function deleteUser(id, username) {
+      if (!confirm('Delete user "' + username + '"?')) return;
+      await fetch('/admin/api/users/' + id, { method: 'DELETE' });
+      loadUsers();
+    }
+
+    function openCreateModal() { document.getElementById('createModal').classList.add('show'); }
+    function closeCreateModal() { document.getElementById('createModal').classList.remove('show'); }
+
+    async function createUser() {
+      const username = document.getElementById('newUsername').value.trim();
+      const password = document.getElementById('newPassword').value;
+      const role = document.getElementById('newRole').value;
+      if (!username || !password) { alert('Username and password required'); return; }
+      const res = await fetch('/admin/api/users', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ username, password, role })
+      });
+      const d = await res.json();
+      if (d.error) { alert(d.error); return; }
+      closeCreateModal();
+      loadUsers();
+    }
+
+    loadUsers();
+  </script>
+</body>
+</html>

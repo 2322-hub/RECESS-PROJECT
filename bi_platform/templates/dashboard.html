@@ -1,19 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; connect-src 'self' wss: ws:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; connect-src 'self' wss: ws:;" />
   <title>BI Platform — Data Dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
 </head>
 <body>
   <a href="#main-content" class="sr-only" style="position:absolute;top:-40px;left:0;background:var(--accent);color:#fff;padding:8px;z-index:100;">Skip to content</a>
 
-  <!-- Loading spinner -->
   <div class="spinner-overlay" id="spinnerOverlay" role="status" aria-label="Loading data">
     <div class="spinner-wrap">
       <div class="spinner"></div>
@@ -30,35 +35,48 @@
       <a href="#" class="nav-link" data-section="products">Products</a>
       <a href="#" class="nav-link" data-section="website">Website</a>
       <a href="#" class="nav-link" data-section="customers">Customers</a>
-      <a href="#" class="nav-link" data-section="alerts">Alerts</a>
+      {% if 'data-explorer' in allowed_sections %}
       <a href="#" class="nav-link" data-section="data-explorer">Data Explorer</a>
+      {% endif %}
+      {% if 'sql-query' in allowed_sections %}
       <a href="#" class="nav-link" data-section="sql-query">SQL Query</a>
+      {% endif %}
+      {% if 'forecasting' in allowed_sections %}
+      <a href="#" class="nav-link" data-section="forecasting">Forecasting</a>
+      {% endif %}
+      {% if 'anomalies' in allowed_sections %}
+      <a href="#" class="nav-link" data-section="anomalies">Anomalies</a>
+      {% endif %}
+      {% if user_role == 'admin' %}
+      <a href="#" class="nav-link" data-section="nl-query">NL Query</a>
+      {% endif %}
     </nav>
     <div class="sidebar-footer">
       <div class="connection-status" id="connStatus" aria-live="polite">
         <span class="status-dot"></span> Real-time connected
       </div>
-      <a href="{{ url_for('auth.logout') }}" class="nav-link" aria-label="Logout" style="border-left:none;padding:.7rem 1.5rem;margin-top:.5rem;">Logout</a>
+      <div class="online-users" id="onlineUsers"></div>
+      {% if user_role == 'admin' %}
+      <a href="/admin/users" class="nav-link" style="border-left:none;padding:.5rem 1.5rem;margin-top:.3rem;font-size:.8rem;">Admin: Users</a>
+      {% endif %}
+      <a href="{{ url_for('auth.logout') }}" class="nav-link" aria-label="Logout" style="border-left:none;padding:.5rem 1.5rem;margin-top:.3rem;">Logout</a>
     </div>
   </aside>
 
   <!-- ─── MAIN ─── -->
   <main class="main" id="main-content">
-    <!-- Top bar -->
     <header class="topbar">
       <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation menu">&#9776;</button>
       <h1 class="topbar-title" id="pageTitle">Overview</h1>
       <div class="topbar-actions">
-        <div class="report-actions" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
-          <button class="btn btn-sm" id="reportCsvBtn" aria-label="Export report as CSV">Export CSV</button>
-          <button class="btn btn-sm" id="reportExcelBtn" aria-label="Export report as Excel">Export Excel</button>
-          <button class="btn btn-sm" id="reportPdfBtn" aria-label="Export report as PDF">Export PDF</button>
-          <button class="btn btn-sm" id="reportPrintBtn" aria-label="Print report">Print Report</button>
-        </div>
         <button class="btn btn-sm" id="refreshBtn" aria-label="Refresh dashboard data">&#8635; Refresh</button>
         <select id="activeConn" aria-label="Active data source" style="margin-right:.5rem;min-width:120px"><option value="demo">demo</option></select>
         <input type="hidden" id="defaultConn" value="{{ default_conn }}" />
-        <button class="btn btn-sm btn-accent" id="connectDbBtn" aria-label="Connect to database">+ Connect DB</button>
+        <input type="hidden" id="userRole" value="{{ user_role }}" />
+        <button class="btn btn-sm btn-accent" id="connectDbBtn" aria-label="Connect to database" {% if user_role != 'admin' %}style="display:none"{% endif %}>+ Connect DB</button>
+        <button class="btn btn-sm" id="themeToggle" aria-label="Toggle theme" title="Toggle dark/light theme">&#9681;</button>
+        <button class="btn btn-sm" id="saveViewBtn" aria-label="Save current view" title="Save current view">Save View</button>
+        <button class="btn btn-sm" id="loadViewsBtn" aria-label="Load saved views" title="Load saved views">Views</button>
         <div class="filter-group" role="group" aria-label="Dashboard filters">
           <select id="regionFilter" aria-label="Filter by region"><option value="">All Regions</option></select>
           <select id="categoryFilter" aria-label="Filter by category"><option value="">All Categories</option></select>
@@ -69,7 +87,6 @@
       </div>
     </header>
 
-    <!-- Drill-down filter indicator -->
     <div class="drilldown-bar" id="drilldownBar" role="status" aria-live="polite">
       <span>Filtered by:</span>
       <span class="drilldown-tag" id="drilldownTag"></span>
@@ -78,45 +95,38 @@
 
     <!-- ═══ OVERVIEW ═══ -->
     <section class="section active" id="sec-overview" aria-label="Overview">
-      <div class="overview-hero">
-        <div class="overview-hero-copy">
-          <p class="eyebrow">Executive overview</p>
-          <h2>See your business pulse in one glance</h2>
-          <p>Track revenue, profitability, product performance, and customer trends with a polished snapshot designed for quick decisions.</p>
-        </div>
-        <div class="overview-hero-metrics">
-          <div class="mini-pill"><span>Live</span> Real-time updates</div>
-          <div class="mini-pill"><span>Filter</span> Drill into segments</div>
-          <div class="mini-pill"><span>Export</span> Share reports fast</div>
-        </div>
-      </div>
       <div class="kpi-row" id="kpiRow" role="region" aria-label="Key performance indicators"></div>
-      <div class="grid grid-2">
-        <div class="card"><canvas id="chartRevenueTrend" aria-label="Revenue trend chart"></canvas></div>
-        <div class="card"><canvas id="chartRegionBar" aria-label="Region bar chart"></canvas></div>
+      <div class="widget-grid" id="overviewGrid">
+        <div class="card widget-item" data-widget="revenueTrend"><canvas id="chartRevenueTrend" aria-label="Revenue trend chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="regionBar"><canvas id="chartRegionBar" aria-label="Region bar chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="categoryPie"><canvas id="chartCategoryPie" aria-label="Category pie chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="segmentDonut"><canvas id="chartSegmentDonut" aria-label="Segment donut chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="profitMargin"><canvas id="chartProfitMargin" aria-label="Profit margin chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
       </div>
-      <div class="grid grid-3">
-        <div class="card"><canvas id="chartCategoryPie" aria-label="Category pie chart"></canvas></div>
-        <div class="card"><canvas id="chartSegmentDonut" aria-label="Segment donut chart"></canvas></div>
-        <div class="card"><canvas id="chartProfitMargin" aria-label="Profit margin chart"></canvas></div>
+      <div class="card" style="margin-top:1rem">
+        <h3>Dashboard Actions</h3>
+        <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">
+          <button class="btn btn-sm btn-accent" id="exportPdfBtn">&#128196; Export PDF</button>
+          <button class="btn btn-sm btn-accent" id="exportExcelBtn">&#128202; Export Excel</button>
+        </div>
       </div>
     </section>
 
     <!-- ═══ REVENUE ═══ -->
     <section class="section" id="sec-revenue" aria-label="Revenue">
       <div class="kpi-row" id="revenueKpis" role="region" aria-label="Revenue KPIs"></div>
-      <div class="grid grid-2">
-        <div class="card"><canvas id="chartMonthlyRev" aria-label="Monthly revenue chart"></canvas></div>
-        <div class="card"><canvas id="chartMonthlyProfit" aria-label="Monthly profit chart"></canvas></div>
+      <div class="widget-grid widget-grid-2" id="revenueGrid">
+        <div class="card widget-item" data-widget="monthlyRev"><canvas id="chartMonthlyRev" aria-label="Monthly revenue chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="monthlyProfit"><canvas id="chartMonthlyProfit" aria-label="Monthly profit chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
       </div>
-      <div class="card"><canvas id="chartRegionalTable" aria-label="Regional comparison chart"></canvas></div>
+      <div class="card widget-item" data-widget="regionalTable"><canvas id="chartRegionalTable" aria-label="Regional comparison chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
     </section>
 
     <!-- ═══ PRODUCTS ═══ -->
     <section class="section" id="sec-products" aria-label="Products">
-      <div class="grid grid-2">
-        <div class="card"><canvas id="chartTopProducts" aria-label="Top products chart"></canvas></div>
-        <div class="card"><canvas id="chartCategoryRevenue" aria-label="Category revenue chart"></canvas></div>
+      <div class="widget-grid widget-grid-2" id="productsGrid">
+        <div class="card widget-item" data-widget="topProducts"><canvas id="chartTopProducts" aria-label="Top products chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="categoryRevenue"><canvas id="chartCategoryRevenue" aria-label="Category revenue chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
       </div>
       <div class="card" id="productTableCard">
         <h2>Product Performance</h2>
@@ -127,38 +137,25 @@
     <!-- ═══ WEBSITE ═══ -->
     <section class="section" id="sec-website" aria-label="Website analytics">
       <div class="kpi-row" id="websiteKpis" role="region" aria-label="Website KPIs"></div>
-      <div class="grid grid-2">
-        <div class="card"><canvas id="chartPageViews" aria-label="Page views chart"></canvas></div>
-        <div class="card"><canvas id="chartConversions" aria-label="Conversions chart"></canvas></div>
+      <div class="widget-grid widget-grid-2" id="websiteGrid">
+        <div class="card widget-item" data-widget="pageViews"><canvas id="chartPageViews" aria-label="Page views chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="conversions"><canvas id="chartConversions" aria-label="Conversions chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
       </div>
     </section>
 
     <!-- ═══ CUSTOMERS ═══ -->
     <section class="section" id="sec-customers" aria-label="Customer insights">
       <div class="kpi-row" id="customerKpis" role="region" aria-label="Customer KPIs"></div>
-      <div class="grid grid-2">
-        <div class="card"><canvas id="chartCustSegment" aria-label="Customer segment chart"></canvas></div>
-        <div class="card"><canvas id="chartCustRegion" aria-label="Customer region chart"></canvas></div>
-      </div>
-    </section>
-
-    <!-- ═══ ALERTS ═══ -->
-    <section class="section" id="sec-alerts" aria-label="Alerts">
-      <div class="card alert-panel-card">
-        <div class="section-heading">
-          <h2>Notifications</h2>
-          <p>Live alerts for operational and business performance.</p>
-        </div>
-        <div class="alert-list" id="alertList"></div>
+      <div class="widget-grid widget-grid-2" id="customersGrid">
+        <div class="card widget-item" data-widget="custSegment"><canvas id="chartCustSegment" aria-label="Customer segment chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
+        <div class="card widget-item" data-widget="custRegion"><canvas id="chartCustRegion" aria-label="Customer region chart"></canvas><button class="chart-export-btn" title="Export chart as image">&#8681;</button></div>
       </div>
     </section>
 
     <!-- ═══ DATA EXPLORER ═══ -->
     <section class="section" id="sec-data-explorer" aria-label="Data Explorer">
       <div class="explorer-controls">
-        <select id="explorerConn" aria-label="Select connection">
-          <option value="demo">demo</option>
-        </select>
+        <select id="explorerConn" aria-label="Select connection"><option value="demo">demo</option></select>
         <select id="explorerTable" aria-label="Select table"></select>
         <input type="text" id="explorerSearch" placeholder="Search..." aria-label="Search table data" />
         <button class="btn btn-sm btn-accent" id="explorerLoad" aria-label="Load table data">Load</button>
@@ -175,7 +172,9 @@
       <div class="card">
         <h2>SQL Query</h2>
         <select id="sqlConnection" aria-label="Select database connection"></select>
-        <textarea id="sqlEditor" rows="6" style="width:100%;font-family:monospace;margin:.5rem 0" placeholder="SELECT * FROM sales LIMIT 10"></textarea>
+        <div class="sql-editor-wrap">
+          <textarea id="sqlEditor" rows="6" placeholder="SELECT * FROM sales LIMIT 10"></textarea>
+        </div>
         <div style="display:flex;gap:.5rem">
           <button class="btn btn-accent" id="sqlRunBtn" aria-label="Run SQL query">Run</button>
           <button class="btn" id="sqlClearBtn" aria-label="Clear result">Clear</button>
@@ -184,9 +183,48 @@
         <div id="sqlResult" style="margin-top:.5rem;overflow:auto;max-height:400px"></div>
       </div>
     </section>
+
+    <!-- ═══ FORECASTING ═══ -->
+    <section class="section" id="sec-forecasting" aria-label="Forecasting">
+      <div class="card">
+        <h2>Revenue Forecasting</h2>
+        <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem">Holt-Winters exponential smoothing with confidence intervals</p>
+        <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem">
+          <label style="font-size:.85rem;color:var(--text-muted)">Forecast periods:</label>
+          <input type="number" id="forecastPeriods" value="6" min="1" max="24" style="width:80px;padding:.35rem .6rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.85rem" />
+          <button class="btn btn-accent" id="forecastRunBtn">Generate Forecast</button>
+        </div>
+        <div id="forecastMetrics" style="margin-bottom:1rem"></div>
+        <div class="card" style="background:var(--bg)"><canvas id="chartForecast" aria-label="Forecast chart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ═══ ANOMALIES ═══ -->
+    <section class="section" id="sec-anomalies" aria-label="Anomaly Detection">
+      <div class="card">
+        <h2>Anomaly Detection</h2>
+        <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem">Z-score based detection for revenue spikes and drops</p>
+        <button class="btn btn-accent" id="anomalyRunBtn">Detect Anomalies</button>
+        <div id="anomalySummary" style="margin-top:1rem"></div>
+        <div id="anomalyResults" style="margin-top:1rem"></div>
+      </div>
+    </section>
+
+    <!-- ═══ NL QUERY ═══ -->
+    <section class="section" id="sec-nl-query" aria-label="Natural Language Query">
+      <div class="card">
+        <h2>Natural Language Query</h2>
+        <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1rem">Ask questions in plain English, get SQL results</p>
+        <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+          <input type="text" id="nlQueryInput" placeholder='e.g. "Show total revenue by region"' style="flex:1;padding:.5rem .7rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.9rem" />
+          <button class="btn btn-accent" id="nlQueryRunBtn">Ask</button>
+        </div>
+        <div id="nlQueryResult" style="margin-top:.5rem"></div>
+      </div>
+    </section>
   </main>
 
-    <!-- ═══ MODAL ═══ -->
+  <!-- ═══ MODAL: Connect DB ═══ -->
   <div class="modal-overlay" id="dbModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal">
       <h3 id="modalTitle">Connect to Database</h3>
@@ -200,6 +238,32 @@
       </div>
     </div>
   </div>
+
+  <!-- ═══ MODAL: Save View ═══ -->
+  <div class="modal-overlay" id="saveViewModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h3>Save Current View</h3>
+      <label>View Name <input type="text" id="viewName" placeholder="My filtered view" maxlength="200" /></label>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('saveViewModal').classList.remove('show')">Cancel</button>
+        <button class="btn btn-accent" id="saveViewConfirm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: Load Views ═══ -->
+  <div class="modal-overlay" id="loadViewsModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:550px">
+      <h3>Saved Views</h3>
+      <div id="savedViewsList" style="max-height:400px;overflow-y:auto;margin:1rem 0"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('loadViewsModal').classList.remove('show')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CURSOR OVERLAYS ═══ -->
+  <div id="cursorContainer" style="position:fixed;inset:0;pointer-events:none;z-index:9999"></div>
 
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
