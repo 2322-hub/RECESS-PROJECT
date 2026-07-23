@@ -1,8 +1,13 @@
+import os
+
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-engine = create_engine("mysql+pymysql://root@localhost:3306/bi_platform")
+load_dotenv(override=True)
+
+engine = create_engine(os.environ.get("DATABASE_URL", "mysql+pymysql://root@localhost:3306/bi_platform"))
 
 with engine.begin() as conn:
     conn.execute(text("DROP TABLE IF EXISTS sales"))

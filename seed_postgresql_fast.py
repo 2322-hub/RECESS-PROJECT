@@ -8,13 +8,20 @@ Generates:
 Usage: python seed_postgresql_fast.py
 """
 
+import os
 import time
 
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-DB_URL = "postgresql+psycopg2://postgres:root@localhost:5432/bi_platform"
+load_dotenv(override=True)
+
+DB_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+psycopg2://postgres:root@localhost:5432/bi_platform",
+)
 engine = create_engine(DB_URL, pool_size=5)
 
 N_SALES = 2_000_000

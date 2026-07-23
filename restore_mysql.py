@@ -1,6 +1,11 @@
+import os
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-e = create_engine("mysql+pymysql://root@localhost:3306/bi_platform")
+load_dotenv(override=True)
+
+e = create_engine(os.environ.get("DATABASE_URL", "mysql+pymysql://root@localhost:3306/bi_platform"))
 with e.begin() as c:
     c.execute(text("DROP TABLE IF EXISTS sales"))
     c.execute(text("DROP TABLE IF EXISTS customers"))
