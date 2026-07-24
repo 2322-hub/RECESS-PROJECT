@@ -164,7 +164,7 @@ def update_view(view_id: int):
             filters = data["filters"]
             if not isinstance(filters, dict):
                 return jsonify({"error": "filters must be an object"}), 400
-            view.filters_json = json.dumps(filters)
+            view.filters_json = json.dumps(filters)  # type: ignore[assignment]
         if "sql_query" in data:
             view.sql_query = data["sql_query"]
         if "connection" in data:
@@ -173,7 +173,7 @@ def update_view(view_id: int):
             section = data["section"]
             if section in _ALLOWED_SECTIONS:
                 view.section = section
-        view.updated_at = datetime.now(timezone.utc)
+        view.updated_at = datetime.now(timezone.utc)  # type: ignore[assignment]
         s.commit()
         d = view.to_dict()
         d.pop("user_id", None)

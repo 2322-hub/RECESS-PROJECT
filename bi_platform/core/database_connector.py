@@ -1,6 +1,8 @@
+from typing import Any
+
 import pandas as pd
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Engine, make_url
 
 from ..config import Config
 
@@ -9,7 +11,7 @@ class DatabaseConnector:
     """Handles connections to multiple database backends and metadata discovery."""
 
     def __init__(self):
-        self._engines: dict[str, object] = {}
+        self._engines: dict[str, Engine] = {}
         self._inspector_cache: dict[str, object] = {}
 
     def connect(self, name: str, connection_string: str) -> dict:
@@ -118,8 +120,8 @@ class DatabaseConnector:
         """)  # noqa: S608
         with engine.connect() as conn:
             row = conn.execute(sql).fetchone()
+        assert row is not None
         return {
-            "record_count": int(row[0]),
             "total_revenue": round(float(row[1]), 2),
             "avg_revenue": round(float(row[2]), 2),
             "total_cost": round(float(row[3]), 2),
@@ -268,6 +270,7 @@ class DatabaseConnector:
         """)  # noqa: S608
         with engine.connect() as conn:
             row = conn.execute(sql).fetchone()
+        assert row is not None
         trend_sql = text(f"""
             SELECT date,
                    SUM(page_views)    AS page_views,
@@ -306,7 +309,8 @@ class DatabaseConnector:
         """)  # noqa: S608
         with engine.connect() as conn:
             row = conn.execute(sql).fetchone()
-        result = {
+        assert row is not None
+        result: dict[str, Any] = {
             "total_customers": int(row[0]),
             "avg_lifetime_value": round(float(row[1]), 2),
             "total_lifetime_value": round(float(row[2]), 2),

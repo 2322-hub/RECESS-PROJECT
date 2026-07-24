@@ -102,7 +102,7 @@ def api_update_user(user_id: int):
         if "password" in data and data["password"]:
             if len(data["password"]) < 8:
                 return jsonify({"error": "Password must be at least 8 characters"}), 400
-            user.password_hash = generate_password_hash(data["password"])
+            user.password_hash = generate_password_hash(data["password"])  # type: ignore[assignment]
 
         session_local.commit()
         logger.info("Admin updated user '%s' (id=%d)", user.username, user_id)

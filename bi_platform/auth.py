@@ -36,8 +36,7 @@ def login():
         session_local = SessionLocal()
         try:
             user = session_local.execute(select(User).where(User.username == username)).scalar_one_or_none()
-            if user and check_password_hash(user.password_hash, password):
-                session.regenerate = True
+            if user and check_password_hash(str(user.password_hash), password):
                 session["user"] = username
                 session["role"] = user.role
                 logger.info("User '%s' logged in", username)
