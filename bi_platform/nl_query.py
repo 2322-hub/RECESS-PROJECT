@@ -4,7 +4,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-TABLE_SCHEMAS = {
+TABLE_SCHEMAS: dict[str, dict[str, Any]] = {
     "sales": {
         "columns": [
             "id",
@@ -54,7 +54,7 @@ DANGEROUS_SQL_RE = re.compile(
 class NLQueryEngine:
     """Natural language to SQL conversion engine."""
 
-    INTENT_PATTERNS = {
+    INTENT_PATTERNS: dict[str, dict[str, Any]] = {
         "show_revenue": {
             "patterns": [
                 r"(?:show|get|display|find|calculate|what is|what's)\s+(?:the\s+)?(?:total\s+)?revenue",
@@ -179,8 +179,9 @@ class NLQueryEngine:
         best_score = 0
         for intent_name, intent in cls.INTENT_PATTERNS.items():
             for pattern in intent["patterns"]:
-                if re.search(pattern, query_lower):
-                    score = len(re.search(pattern, query_lower).group())
+                match = re.search(pattern, query_lower)
+                if match:
+                    score = len(match.group())
                     if score > best_score:
                         best_score = score
                         best_intent = intent_name

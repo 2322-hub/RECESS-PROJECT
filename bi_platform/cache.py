@@ -7,7 +7,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _redis_client = None
-_redis_last_attempt = 0
+_redis_last_attempt: float = 0
 _REDIS_RETRY_INTERVAL = 30
 
 
