@@ -42,6 +42,25 @@ class TestDatabaseConnector:
         assert len(df) == 1
         assert df["cnt"].iloc[0] > 0
 
+    def test_fetch_table_page_limits_rows(self, connector):
+        connector.connect_demo_sqlite()
+        data = connector.fetch_table_page("demo", "sales", page=2, per_page=10)
+        assert data["page"] == 2
+        assert data["per_page"] == 10
+        assert data["total"] > 10
+        assert data["pages"] > 1
+        assert len(data["rows"]) == 10
+        assert "id" in data["columns"]
+
+    def test_fetch_table_page_searches_and_sorts(self, connector):
+        connector.connect_demo_sqlite()
+        data = connector.fetch_table_page("demo", "sales", per_page=5, search="North", sort="-total_revenue")
+        assert len(data["rows"]) <= 5
+        assert data["total"] > 0
+        assert all("North" in [str(v) for v in row.values()] for row in data["rows"])
+        revenues = [row["total_revenue"] for row in data["rows"]]
+        assert revenues == sorted(revenues, reverse=True)
+
     def test_invalid_connection(self, connector):
         with pytest.raises(ValueError, match="No connection named"):
             connector.list_tables("nonexistent")

@@ -34,7 +34,7 @@ def get_redis():
 
 
 _memory_cache: dict[str, tuple[float, Any]] = {}
-MEMORY_TTL = 30
+MEMORY_TTL = 300  # 5 minutes
 _MAX_MEMORY_CACHE_ENTRIES = 500
 
 
@@ -52,7 +52,7 @@ def _evict_stale():
 
 
 class CacheLayer:
-    TTL = 60
+    TTL = 300  # 5 minutes
 
     @staticmethod
     def get(key: str) -> Any | None:

@@ -313,7 +313,8 @@
     const pp = d.product_performance || [];
     let tableHtml = '<table><thead><tr><th>Category</th><th>Product</th><th>Revenue</th><th>Profit</th><th>Quantity</th></tr></thead><tbody>';
     pp.forEach(function(p) {
-      tableHtml += '<tr><td>' + escapeHtml(p.product_category) + '</td><td>' + escapeHtml(p.product_name) + '</td><td>UGX ' + escapeHtml(formatNum(p.revenue)) + '</td><td>UGX ' + escapeHtml(formatNum(p.profit)) + '</td><td>' + escapeHtml(formatNum(p.quantity)) + '</td></tr>';
+      const revenue = p.revenue != null ? p.revenue : p.total_revenue;
+      tableHtml += '<tr><td>' + escapeHtml(p.product_category) + '</td><td>' + escapeHtml(p.product_name) + '</td><td>UGX ' + escapeHtml(formatNum(revenue)) + '</td><td>UGX ' + escapeHtml(formatNum(p.profit)) + '</td><td>' + escapeHtml(formatNum(p.quantity)) + '</td></tr>';
     });
     tableHtml += '</tbody></table>';
     document.getElementById("productTable").innerHTML = tableHtml;
@@ -383,11 +384,29 @@
   function renderAll(d) {
     DATA = d;
     renderKpis("kpiRow", d.kpis);
-    buildOverviewCharts(d);
-    buildRevenueCharts(d);
-    buildProductCharts(d);
-    buildWebsiteCharts(d);
-    buildCustomerCharts(d);
+    const activeSection = document.querySelector(".nav-link.active")?.dataset.section || "overview";
+    renderSection(activeSection, d);
+  }
+
+  function renderSection(section, d) {
+    if (!d) d = DATA;
+    switch (section) {
+      case "overview":
+        buildOverviewCharts(d);
+        break;
+      case "revenue":
+        buildRevenueCharts(d);
+        break;
+      case "products":
+        buildProductCharts(d);
+        break;
+      case "website":
+        buildWebsiteCharts(d);
+        break;
+      case "customers":
+        buildCustomerCharts(d);
+        break;
+    }
   }
 
   function showError(msg) {
@@ -470,6 +489,12 @@
     }
   }
 
+  function filtersActive() {
+    return ["regionFilter", "categoryFilter", "segmentFilter", "dateStart", "dateEnd"].some(
+      id => document.getElementById(id)?.value
+    );
+  }
+
   async function applyFilters() {
     const conn = (document.getElementById("activeConn") || {}).value || "demo";
     const body = {
@@ -486,9 +511,14 @@
     try {
       const res = await fetch("/api/v1/filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.error || "Filter failed (HTTP " + res.status + ")");
       filteredKpis = d.kpis;
-      renderKpis("kpiRow", d.kpis);
-    } catch (e) { console.error(e); }
+      renderAll(d);
+      hideError();
+    } catch (e) {
+      showError("Filter failed: " + e.message);
+      console.error(e);
+    }
   }
 
   // ─── Navigation ───
@@ -503,6 +533,7 @@
       if (target) target.classList.add("active");
       $("#pageTitle").textContent = link.textContent;
       document.getElementById("sidebar").classList.remove("open");
+      renderSection(sec, DATA);
     });
   });
 
@@ -557,7 +588,9 @@
       document.getElementById("dbModal").classList.remove("show");
       await populateActiveConn();
       document.getElementById("activeConn").value = name;
+      document.getElementById("explorerConn").value = name;
       fetchData();
+      loadExplorerTables();
     } catch (e) { alert("Connection failed: " + e.message); }
   });
 
@@ -567,23 +600,47 @@
     const conn = document.getElementById("explorerConn").value;
     try {
       const res = await fetch("/api/v1/tables?conn=" + encodeURIComponent(conn));
+      if (!res.ok) throw new Error("Failed to load tables (HTTP " + res.status + ")");
       const tables = await res.json();
       const sel = document.getElementById("explorerTable");
       sel.innerHTML = tables.map(t => '<option value="' + t + '">' + t + '</option>').join("");
-      if (tables.length) loadExplorer();
-    } catch (e) { console.error(e); }
+      if (tables.length) {
+        loadExplorer();
+      } else {
+        document.getElementById("explorerTableWrap").innerHTML = "<p>No tables found</p>";
+        document.getElementById("explorerPagination").innerHTML = "";
+      }
+    } catch (e) {
+      showError(e.message);
+      console.error(e);
+    }
   }
   async function loadExplorer() {
     const conn = document.getElementById("explorerConn").value;
     const table = document.getElementById("explorerTable").value;
     const search = document.getElementById("explorerSearch").value;
     if (!table) return;
+    const wrap = document.getElementById("explorerTableWrap");
+    wrap.innerHTML = "<p>Loading...</p>";
     try {
-      const res = await fetch("/api/v1/data/" + encodeURIComponent(table) + "?conn=" + encodeURIComponent(conn) + "&page=" + explorerPage + "&per_page=50&search=" + encodeURIComponent(search));
+      const params = new URLSearchParams({
+        conn: conn,
+        page: explorerPage,
+        per_page: 50,
+        search: search,
+      });
+      const res = await fetch("/api/v1/data/" + encodeURIComponent(table) + "?" + params.toString());
       const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.error || "Failed to load data (HTTP " + res.status + ")");
+      hideError();
       renderTable("explorerTableWrap", d.columns, d.rows);
       renderPagination("explorerPagination", d.pages, d.page, (p) => { explorerPage = p; loadExplorer(); });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      wrap.innerHTML = "<p>No data</p>";
+      document.getElementById("explorerPagination").innerHTML = "";
+      showError("Data explorer error: " + e.message);
+      console.error(e);
+    }
   }
   $("#explorerConn").addEventListener("change", () => { explorerPage = 1; loadExplorerTables(); });
   $("#explorerTable").addEventListener("change", () => { explorerPage = 1; loadExplorer(); });
@@ -628,15 +685,6 @@
 
   // ─── SQL Query with CodeMirror ───
   let sqlCodeMirror = null;
-  async function loadConnections() {
-    try {
-      const res = await fetch("/api/v1/connections");
-      const names = await res.json();
-      const sel = document.getElementById("sqlConnection");
-      sel.innerHTML = "";
-      names.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); });
-    } catch (e) { console.error(e); }
-  }
 
   function initCodeMirror() {
     const textarea = document.getElementById("sqlEditor");
@@ -995,14 +1043,15 @@
     el.innerHTML = '<span class="status-dot" style="background:var(--red)"></span> Disconnected';
   });
   socket.on("dashboard_update", (d) => {
-    renderAll(d);
-    populateFilters(d);
-    const anyFilterActive = ["regionFilter", "categoryFilter", "segmentFilter"].some(
-      id => document.getElementById(id)?.value
-    );
-    if (anyFilterActive && filteredKpis) {
-      renderKpis("kpiRow", filteredKpis);
+    if (filtersActive()) {
+      applyFilters();
+      return;
     }
+    DATA = d;
+    renderKpis("kpiRow", d.kpis);
+    const activeSection = document.querySelector(".nav-link.active")?.dataset.section || "overview";
+    renderSection(activeSection, d);
+    populateFilters(d);
   });
 
   // ─── Online users (collaborative) ───
@@ -1040,23 +1089,39 @@
     try {
       const res = await fetch("/api/v1/connections");
       const names = await res.json();
-      const sel = document.getElementById("activeConn");
       const defaultConn = document.getElementById("defaultConn").value || "demo";
+
+      // Populate main activeConn dropdown
+      const sel = document.getElementById("activeConn");
       const current = sel.value;
       sel.innerHTML = names.map(n => '<option value="' + n + '">' + n + '</option>').join("");
       if (names.includes(current)) sel.value = current;
       else if (names.includes(defaultConn)) sel.value = defaultConn;
       else sel.value = names[0];
+
+      // Sync explorerConn dropdown with the same connections
+      const explorerSel = document.getElementById("explorerConn");
+      const explorerCurrent = explorerSel.value;
+      explorerSel.innerHTML = names.map(n => '<option value="' + n + '">' + n + '</option>').join("");
+      if (names.includes(explorerCurrent)) explorerSel.value = explorerCurrent;
+      else if (names.includes(defaultConn)) explorerSel.value = defaultConn;
+      else explorerSel.value = names[0];
+
+      // Sync sqlConnection dropdown too
+      const sqlSel = document.getElementById("sqlConnection");
+      if (sqlSel) {
+        const sqlCurrent = sqlSel.value;
+        sqlSel.innerHTML = names.map(n => '<option value="' + n + '">' + n + '</option>').join("");
+        if (names.includes(sqlCurrent)) sqlSel.value = sqlCurrent;
+      }
     } catch (e) { console.error(e); }
   }
   $("#activeConn").addEventListener("change", fetchData);
 
   // ─── Init ───
   (async function init() {
-    await populateActiveConn();
-    await fetchData();
+    await Promise.all([populateActiveConn(), fetchData()]);
     loadExplorerTables();
-    loadConnections();
     initCodeMirror();
     initSortableGrids();
   })();

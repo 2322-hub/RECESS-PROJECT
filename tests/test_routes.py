@@ -83,6 +83,22 @@ class TestRoutes:
         assert res.status_code == 200
         data = res.get_json()
         assert "kpis" in data
+        assert "monthly_trends" in data
+        assert "revenue_breakdown" in data
+        assert data["row_count"] == data["kpis"]["record_count"]
+        assert {row["region"] for row in data["regional_comparison"]} == {"North"}
+
+    def test_api_filter_no_matches_returns_valid_payload(self, authenticated_client):
+        res = authenticated_client.post(
+            "/api/v1/filter",
+            json={"table": "sales", "filters": {"region": "Nowhere"}},
+            content_type="application/json",
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["row_count"] == 0
+        assert data["kpis"]["record_count"] == 0
+        assert data["monthly_trends"] == []
 
     def test_api_table_data(self, authenticated_client):
         res = authenticated_client.get("/api/v1/data/sales?page=1&per_page=10")
@@ -90,6 +106,18 @@ class TestRoutes:
         data = res.get_json()
         assert "columns" in data
         assert "rows" in data
+        assert data["per_page"] == 10
+        assert len(data["rows"]) == 10
+
+    def test_api_table_data_search_and_sort(self, authenticated_client):
+        res = authenticated_client.get("/api/v1/data/sales?page=1&per_page=5&search=North&sort=-total_revenue")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["total"] > 0
+        assert len(data["rows"]) <= 5
+        assert all(row["region"] == "North" for row in data["rows"])
+        revenues = [row["total_revenue"] for row in data["rows"]]
+        assert revenues == sorted(revenues, reverse=True)
 
     def test_api_report_export_pdf(self, authenticated_client):
         res = authenticated_client.post(

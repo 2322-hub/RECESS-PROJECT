@@ -62,13 +62,6 @@ _active_conn: dict[str, str] = {}
 _row_count_cache: dict[str, int] = {}
 _data_dirty: bool = True
 
-_SALES_COLUMNS = (
-    "date, region, product_category, product_name, quantity, "
-    "unit_price, total_revenue, cost, profit, customer_segment"
-)
-_CUSTOMER_COLUMNS = "id, name, email, region, signup_date, lifetime_value, orders_count, segment"
-_WEBSITE_COLUMNS = "date, page_views, unique_visitors, bounce_rate, avg_session_duration, conversions, revenue"
-
 _TABLE_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _DANGEROUS_SQL_RE = re.compile(
     r"(;|\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|EXEC|EXECUTE|INTO|GRANT|REVOKE)\b)",
@@ -148,16 +141,8 @@ def _get_cached(name: str, conn: str = "demo") -> pd.DataFrame:
     if not _TABLE_RE.match(name):
         raise ValueError(f"Invalid table name: {name}")
     if cache_key not in _df_cache:
-        if name == "sales":
-            cols = _SALES_COLUMNS
-        elif name == "customers":
-            cols = _CUSTOMER_COLUMNS
-        elif name == "website_analytics":
-            cols = _WEBSITE_COLUMNS
-        else:
-            cols = "*"
-        _df_cache[cache_key] = db_connector.execute_query(conn, f"SELECT {cols} FROM {name}")  # noqa: S608
-    return _df_cache[cache_key]
+        _df_cache[cache_key] = db_connector.execute_query(conn, f"SELECT * FROM {name}")  # noqa: S608
+    return _df_cache[cache_key].copy()
 
 
 _FILTER_ALIASES = {
@@ -185,9 +170,7 @@ def _apply_column_filter(df: pd.DataFrame, column: str, value) -> pd.DataFrame:
     return df[series == str(value)]
 
 
-def _apply_date_filter(
-    df: pd.DataFrame, candidates: tuple[str, ...], start: str | None, end: str | None
-) -> pd.DataFrame:
+def _apply_date_filter(df: pd.DataFrame, candidates: tuple[str, ...], start: str | None, end: str | None) -> pd.DataFrame:
     if df.empty or (not start and not end):
         return df
     date_col = next((col for col in candidates if col in df.columns), None)
@@ -306,11 +289,11 @@ def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
     mapped_table = _CONN_TABLE_MAP.get(conn)
 
     if mapped_table and mapped_table in tables:
-        sales = db_connector.execute_query(conn, f"SELECT {_SALES_COLUMNS} FROM {mapped_table}")  # noqa: S608
+        sales = db_connector.execute_query(conn, f"SELECT * FROM {mapped_table}")  # noqa: S608
         sales = _normalize_columns(sales, "sales")
     elif "products" in tables and "sales" in tables:
-        products_df = db_connector.execute_query(conn, "SELECT id, name, category FROM products")
-        sales = db_connector.execute_query(conn, "SELECT id, sale_date, product_id, total FROM sales")
+        products_df = db_connector.execute_query(conn, "SELECT * FROM products")
+        sales = db_connector.execute_query(conn, "SELECT * FROM sales")
         sales = sales.merge(products_df, left_on="product_id", right_on="id", suffixes=("", "_prod"))
         sales = sales.rename(
             columns={
@@ -327,20 +310,20 @@ def _load_dashboard_data(conn: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         sales["customer_segment"] = "All"
         sales["total_revenue"] = sales["total_revenue"].astype(float)
     elif "sales" in tables:
-        sales = db_connector.execute_query(conn, f"SELECT {_SALES_COLUMNS} FROM sales")
+        sales = db_connector.execute_query(conn, "SELECT * FROM sales")
         sales = _normalize_columns(sales, "sales")
     else:
         for tbl in tables:
-            raw = db_connector.execute_query(conn, f"SELECT * FROM {tbl} LIMIT 1000")  # noqa: S608
+            raw = db_connector.execute_query(conn, f"SELECT * FROM {tbl}")  # noqa: S608
             if not raw.empty:
                 sales = _normalize_columns(raw, "sales")
                 break
 
     if "customers" in tables:
-        customers = db_connector.execute_query(conn, f"SELECT {_CUSTOMER_COLUMNS} FROM customers")
+        customers = db_connector.execute_query(conn, "SELECT * FROM customers")
         customers = _normalize_columns(customers, "customers")
     if "website_analytics" in tables:
-        website = db_connector.execute_query(conn, f"SELECT {_WEBSITE_COLUMNS} FROM website_analytics")
+        website = db_connector.execute_query(conn, "SELECT * FROM website_analytics")
 
     logger.info("Loaded '%s': sales=%d, customers=%d, website=%d", conn, len(sales), len(customers), len(website))
     return sales, customers, website
@@ -365,8 +348,9 @@ def api_dashboard_data():
             payload = analytics.build_dashboard_payload_sql(db_connector, conn, table=table)
             payload["_conn"] = conn
             payload["_mode"] = "sql"
-            payload["_sales_rows"] = _row_count_cache.get(f"{conn}:{table}", 0)
-            CacheLayer.set(cache_key, payload, ttl=Config.DASHBOARD_CACHE_TTL)
+            cache_key_count = f"{conn}:{table}"
+            payload["_sales_rows"] = _row_count_cache.get(cache_key_count, 0)
+            CacheLayer.set(cache_key, payload, ttl=30)
             return _json_response(payload)
         except Exception as e:
             logger.error("SQL dashboard error for '%s': %s", conn, e, exc_info=True)
@@ -381,7 +365,7 @@ def api_dashboard_data():
     payload["_conn"] = conn
     payload["_mode"] = "dataframe"
     payload["_sales_rows"] = len(sales)
-    CacheLayer.set(cache_key, payload, ttl=Config.DASHBOARD_CACHE_TTL)
+    CacheLayer.set(cache_key, payload, ttl=30)
     return _json_response(payload)
 
 
@@ -876,12 +860,15 @@ def handle_refresh():
         payload["_conn"] = conn
         payload["_mode"] = "dataframe"
 
-    socketio.emit("dashboard_update", payload)
+    socketio.emit(
+        "dashboard_update",
+        json.loads(json.dumps(payload, default=safe_json_serialize)),
+    )
 
 
 def start_realtime_loop():
     global _data_dirty
-    interval = Config.REALTIME_LOOP_INTERVAL
+    interval = Config.REALTIME_INTERVAL
     while True:
         time.sleep(interval)
         if not _data_dirty:
@@ -890,12 +877,6 @@ def start_realtime_loop():
         try:
             for user, conn in list(_active_conn.items()):
                 try:
-                    cache_key = f"dashboard:{conn}"
-                    cached = CacheLayer.get(cache_key)
-                    if cached:
-                        socketio.emit("dashboard_update", cached)
-                        continue
-
                     if _use_sql_mode(conn):
                         table = _get_table_for_conn(conn)
                         payload = analytics.build_dashboard_payload_sql(db_connector, conn, table=table)
@@ -911,37 +892,25 @@ def start_realtime_loop():
                     else:
                         tables = db_connector.list_tables(conn)
                         mapped = _CONN_TABLE_MAP.get(conn, "sales")
-                        if mapped in tables:
-                            sales_qry = f"SELECT {_SALES_COLUMNS} FROM {mapped}"
-                        elif "sales" in tables:
-                            sales_qry = f"SELECT {_SALES_COLUMNS} FROM sales"
-                        else:
-                            sales_qry = None
+                        sales_qry = f"SELECT * FROM {mapped}" if mapped in tables else ("SELECT * FROM sales" if "sales" in tables else None)
                         sales = _normalize_columns(
                             db_connector.execute_query(conn, sales_qry) if sales_qry else pd.DataFrame(),
                             "sales",
                         )
-                        cust_qry = (
-                            f"SELECT {_CUSTOMER_COLUMNS} FROM customers"
-                            if "customers" in tables
-                            else None
-                        )
+                        cust_qry = "SELECT * FROM customers" if "customers" in tables else None
                         customers = _normalize_columns(
                             db_connector.execute_query(conn, cust_qry) if cust_qry else pd.DataFrame(),
                             "customers",
                         )
-                        wa_qry = (
-                            f"SELECT {_WEBSITE_COLUMNS} FROM website_analytics"
-                            if "website_analytics" in tables
-                            else None
-                        )
+                        wa_qry = "SELECT * FROM website_analytics" if "website_analytics" in tables else None
                         website = db_connector.execute_query(conn, wa_qry) if wa_qry else pd.DataFrame()
                         payload = analytics.build_dashboard_payload(sales, customers, website)
                         payload["_conn"] = conn
                         payload["_mode"] = "dataframe"
-
-                    CacheLayer.set(cache_key, payload, ttl=Config.DASHBOARD_CACHE_TTL)
-                    socketio.emit("dashboard_update", payload)
+                    socketio.emit(
+                        "dashboard_update",
+                        json.loads(json.dumps(payload, default=safe_json_serialize)),
+                    )
                 except Exception as exc:
                     logger.error("Realtime error for '%s' (%s): %s", user, conn, exc)
         except Exception as exc:
