@@ -1,7 +1,7 @@
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import MetaData, String, Table, cast, create_engine, func, inspect, or_, select, text
 from sqlalchemy.engine import Engine, make_url
 
 from ..config import Config
@@ -74,6 +74,61 @@ class DatabaseConnector:
             count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()  # noqa: S608
         columns = self.get_columns(conn_name, table)
         return {"table": table, "row_count": count, "columns": columns}
+
+    def fetch_table_page(
+        self,
+        conn_name: str,
+        table_name: str,
+        page: int = 1,
+        per_page: int = 100,
+        sort: str | None = None,
+        search: str | None = None,
+    ) -> dict:
+        """Return one table page using database-side filtering, sorting, and paging."""
+        engine = self._engines.get(conn_name)
+        if engine is None:
+            raise ValueError(f"No connection named '{conn_name}'")
+
+        page = max(1, page)
+        per_page = max(1, per_page)
+        offset = (page - 1) * per_page
+
+        metadata = MetaData()
+        table = Table(table_name, metadata, autoload_with=engine)
+        columns = [col.name for col in table.columns]
+
+        filters = []
+        if search:
+            search_like = f"%{search}%"
+            filters.append(or_(*(cast(col, String).ilike(search_like) for col in table.columns)))
+
+        count_stmt = select(func.count()).select_from(table)
+        page_stmt = select(table)
+        if filters:
+            count_stmt = count_stmt.where(*filters)
+            page_stmt = page_stmt.where(*filters)
+
+        if sort:
+            desc = sort.startswith("-")
+            sort_col = sort.lstrip("-")
+            if sort_col in table.c:
+                order_col = table.c[sort_col].desc() if desc else table.c[sort_col].asc()
+                page_stmt = page_stmt.order_by(order_col)
+
+        page_stmt = page_stmt.limit(per_page).offset(offset)
+
+        with engine.connect() as conn:
+            total = conn.execute(count_stmt).scalar() or 0
+            rows = conn.execute(page_stmt).mappings().all()
+
+        return {
+            "columns": columns,
+            "rows": [dict(row) for row in rows],
+            "total": int(total),
+            "page": page,
+            "per_page": per_page,
+            "pages": (int(total) + per_page - 1) // per_page,
+        }
 
     # ------------------------------------------------------------------
     # Query execution
@@ -176,14 +231,22 @@ class DatabaseConnector:
         if not table.isidentifier():
             raise ValueError(f"Invalid table name: {table}")
         engine = self._engines[conn_name]
+        dialect = engine.dialect.name
+        # Use dialect-appropriate date truncation for index efficiency
+        if dialect == "postgresql":
+            date_expr = "TO_CHAR(date::date, 'YYYY-MM')"
+        elif dialect == "mysql":
+            date_expr = "DATE_FORMAT(date, '%Y-%m')"
+        else:
+            date_expr = "SUBSTR(date, 1, 7)"
         sql = text(f"""
             SELECT
-                SUBSTR(date, 1, 7)                 AS date,
+                {date_expr}                        AS date,
                 SUM(total_revenue)                  AS revenue,
                 COALESCE(SUM(profit), 0)            AS profit,
                 COALESCE(SUM(quantity), 0)          AS quantity
             FROM {table}
-            GROUP BY SUBSTR(date, 1, 7)
+            GROUP BY {date_expr}
             ORDER BY date
         """)  # noqa: S608
         with engine.connect() as conn:

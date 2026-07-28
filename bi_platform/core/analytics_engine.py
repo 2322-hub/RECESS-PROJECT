@@ -37,19 +37,20 @@ class AnalyticsEngine:
     def monthly_trends(df: pd.DataFrame) -> list[dict]:
         if df.empty or "date" not in df.columns or "total_revenue" not in df.columns:
             return []
-        tmp = df.copy()
-        tmp["date"] = pd.to_datetime(tmp["date"], errors="coerce")
-        tmp = tmp.dropna(subset=["date"])
-        if tmp.empty:
+        dates = pd.to_datetime(df["date"], errors="coerce")
+        valid = dates.notna()
+        if not valid.any():
             return []
         agg_dict: dict[str, Any] = {"total_revenue": "sum"}
-        if "profit" in tmp.columns:
+        subset = df.loc[valid].copy()
+        subset["_period"] = dates.loc[valid].dt.to_period("M")
+        if "profit" in subset.columns:
             agg_dict["profit"] = "sum"
-        if "quantity" in tmp.columns:
+        if "quantity" in subset.columns:
             agg_dict["quantity"] = "sum"
-        monthly = tmp.groupby(tmp["date"].dt.to_period("M")).agg(agg_dict).reset_index()
-        monthly["date"] = monthly["date"].astype(str)
-        monthly = monthly.rename(columns={"total_revenue": "revenue"})
+        monthly = subset.groupby("_period").agg(agg_dict).reset_index()
+        monthly["_period"] = monthly["_period"].astype(str)
+        monthly = monthly.rename(columns={"_period": "date", "total_revenue": "revenue"})
         if "profit" not in monthly.columns:
             monthly["profit"] = 0
         if "quantity" not in monthly.columns:
@@ -285,34 +286,48 @@ class AnalyticsEngine:
     # ------------------------------------------------------------------
     # SQL-backed dashboard (for large datasets — no full-table loads)
     # ------------------------------------------------------------------
-    def build_dashboard_payload_sql(self, db_connector, conn: str) -> dict:
+    def build_dashboard_payload_sql(self, db_connector, conn: str, table: str = "sales") -> dict:
         """Build full dashboard payload using only SQL aggregations.
 
         Never loads the full table into Python memory.
         Suitable for datasets with millions of rows.
+        Uses a single database connection for all queries to reduce overhead.
         """
-        kpis = db_connector.sql_kpis(conn)
-        revenue_breakdown = db_connector.sql_revenue_breakdown(conn)
-        monthly_trends = db_connector.sql_monthly_trends(conn)
-        regional_comparison = db_connector.sql_regional_comparison(conn)
-        product_performance = db_connector.sql_product_performance(conn)
-        top_products = db_connector.sql_top_n(conn, "product_name", "total_revenue", n=10)
-        website_analytics = db_connector.sql_website_summary(conn)
-        customer_insights = db_connector.sql_customer_insights(conn)
+        engine = db_connector._engines.get(conn)
+        if engine is None:
+            raise ValueError(f"No connection named '{conn}'")
 
-        correlation = {}
-        profile = {}
-        try:
-            sample = db_connector.execute_query(
-                conn,
-                "SELECT total_revenue, cost, profit, quantity, unit_price "
-                "FROM sales TABLESAMPLE BERNOULLI(1) LIMIT 5000",
-            )
-            if not sample.empty:
-                correlation = db_connector.sql_correlation_matrix(sample)
-                profile = self.dp.profile(sample)
-        except Exception:  # noqa: BLE001, S110
-            pass  # profiling is best-effort
+        with engine.connect():
+            kpis = db_connector.sql_kpis(conn, table=table)
+            revenue_breakdown = db_connector.sql_revenue_breakdown(conn, table=table)
+            monthly_trends = db_connector.sql_monthly_trends(conn, table=table)
+            regional_comparison = db_connector.sql_regional_comparison(conn, table=table)
+            product_performance = db_connector.sql_product_performance(conn, table=table)
+            top_products = db_connector.sql_top_n(conn, "product_name", "total_revenue", n=10, table=table)
+            website_analytics = {}
+            try:
+                website_analytics = db_connector.sql_website_summary(conn)
+            except Exception:
+                pass
+            customer_insights = {}
+            try:
+                customer_insights = db_connector.sql_customer_insights(conn)
+            except Exception:
+                pass
+
+            correlation = {}
+            profile = {}
+            try:
+                sample = db_connector.execute_query(
+                    conn,
+                    f"SELECT total_revenue, cost, profit, quantity, unit_price "
+                    f"FROM {table} TABLESAMPLE BERNOULLI(1) LIMIT 5000",
+                )
+                if not sample.empty:
+                    correlation = db_connector.sql_correlation_matrix(sample)
+                    profile = self.dp.profile(sample)
+            except Exception:  # noqa: BLE001, S110
+                pass  # profiling is best-effort
 
         return {
             "kpis": kpis,

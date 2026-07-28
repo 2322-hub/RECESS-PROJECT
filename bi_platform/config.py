@@ -40,8 +40,10 @@ class Config:
     }
 
     # Data processing limits
-    MAX_ROWS_IN_MEMORY = int(os.environ.get("MAX_ROWS_IN_MEMORY", "5_000_000"))
+    MAX_ROWS_IN_MEMORY = int(os.environ.get("MAX_ROWS_IN_MEMORY", "500_000"))
     CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "100_000"))
+    DASHBOARD_CACHE_TTL = int(os.environ.get("DASHBOARD_CACHE_TTL", "300"))  # 5 minutes
+    REALTIME_LOOP_INTERVAL = int(os.environ.get("REALTIME_LOOP_INTERVAL", "30"))
     QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", "60"))
 
     # WebSocket settings
@@ -50,7 +52,7 @@ class Config:
 
     # SQL query restrictions
     SQL_READ_ONLY = os.environ.get("SQL_READ_ONLY", "true").lower() in ("true", "1", "yes")
-    SQL_ALLOWED_TABLES = {"sales", "customers", "website_analytics"}
+    SQL_ALLOWED_TABLES = {"sales", "customers", "website_analytics", "country_sales"}
     SQL_MAX_ROWS = 1000
 
     # Rate limiting
